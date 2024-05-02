@@ -1,0 +1,15 @@
+# Ignore everything
+*
+
+runs/
+*.pkl
+*.pth
+
+
+# But do not ignore .gitignore and other root files
+!.gitignore
+!/*
+
+
+
+# Explicitly allow files in specified directories (non-recursive)
