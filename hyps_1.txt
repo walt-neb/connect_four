@@ -1,0 +1,18 @@
+#filename: hyps_1.txt
+
+end_episode =5500
+max_replay_buffer_size = 1500
+agent1_learning_rate = 1.5e-3
+agent2_learning_rate = 1.5e-3
+batch_size = 64
+agent_1_layer_dims = [128 64 64]
+agent_2_layer_dims = [128 64 64]
+gamma = 0.97
+
+noise = 0.1
+render_game_at = [1, 500, 1000, 3000, 5000]
+
+min_checkpoint_span = 10
+log_actions_and_obs = False
+score_improvement_delta = 7
+training_patience_threshold = 1500

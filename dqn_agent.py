@@ -8,18 +8,24 @@ import torch
 import torch.nn as nn
 
 class DQNAgent(nn.Module):
-    def __init__(self, input_dim, output_dim, epsilon_start=1.0, epsilon_final=0.01, epsilon_decay=500):
+    def __init__(self, input_dim, output_dim, hidden_layers):
         super(DQNAgent, self).__init__()
-        self.network = nn.Sequential(
-            nn.Linear(input_dim, 128),
-            nn.LeakyReLU(),
-            nn.Linear(128, 128),
-            nn.LeakyReLU(),
-            nn.Linear(128, 128), 
-            nn.LeakyReLU(),           
-            nn.Linear(128, output_dim)
-        )
+        layers = []
 
+        # Create the first layer from input dimension to the first hidden layer size
+        layers.append(nn.Linear(input_dim, hidden_layers[0]))
+        layers.append(nn.LeakyReLU())
+
+        # Create all hidden layers
+        for i in range(1, len(hidden_layers)):
+            layers.append(nn.Linear(hidden_layers[i-1], hidden_layers[i]))
+            layers.append(nn.LeakyReLU())
+
+        # Create the final layer from the last hidden layer to the output dimension
+        layers.append(nn.Linear(hidden_layers[-1], output_dim))
+
+        # Wrap all defined layers in a Sequential module
+        self.network = nn.Sequential(*layers)
         self.output_dim = output_dim
 
     def forward(self, x):

@@ -9,14 +9,14 @@ class ConnectFour:
         self.columns = columns
         self.win_length = win_length
         self.board = np.zeros((self.rows, self.columns), dtype=int)
-        self.current_player = 1  # Player 1 starts
+        self.current_player = 1  # for now, gets updated on reset
         self.done = False
         self.winner = None
 
     def get_player_symbol(self, current_player):
         """
         Returns the symbol for the current player.
-        Assumes Player 1 is 'X' and Player 2 is 'O'.
+        Player 1 is always 'X' and Player 2 is always 'O'.
         """
         if current_player == 1:
             return 'X'
@@ -126,4 +126,6 @@ class ConnectFour:
         for row in display_board:
             print(" |" + "|".join(symbols[cell] for cell in row) + "|")
         print()
+
+        return self.winner
         
