@@ -305,9 +305,9 @@ def main():
 
         if done and episode % 1000 == 0:
             print(f'saving models and replay buffer at episode {episode}')
-            torch.save(agent1.state_dict(), 'agent1_weights.pth')
-            torch.save(agent2.state_dict(), 'agent2_weights.pth')
-            with open('replay_buffer.pkl', 'wb') as f:
+            torch.save(agent1.state_dict(), f'agent1_weights_{hyp_file_root}.pth')
+            torch.save(agent2.state_dict(), f'agent2_weights_{hyp_file_root}.pth')
+            with open(f'replay_buffer_{hyp_file_root}.pkl', 'wb') as f:
                 pickle.dump(replay_buffer, f)
 
 
