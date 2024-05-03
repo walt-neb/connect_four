@@ -8,9 +8,30 @@ import numpy as np
 from dqn_agent import DQNAgent  
 from two_player_env import ConnectFour 
 
+def get_hidden_layer_dimensions(agent_path):
+    
+    #Extracts hidden layer dimensions from a PyTorch checkpoint weights file.
+    
+    # Load the checkpoint weights
+    state_dict = torch.load(agent_path)
+
+    # Extract hidden layer dimensions (from bias parameters)
+    hidden_layer_dims = []
+    for key, param in state_dict.items():
+        if 'bias' in key:  # Focus on bias parameters
+            hidden_layer_dims.append(param.shape[0])  
+
+    hidden_layer_dims.pop()  # Remove the output layer dimension
+
+    # Format the output string
+    formatted_dims = f"[{','.join(str(dim) for dim in hidden_layer_dims)}]"
+    return formatted_dims
+
+
+
 def main():
     if len(argv) != 2:
-        print("Usage: python play.py <trained_agent_path>")
+        print("Usage: python play.py <trained_agent_weights>")
         return
     agent_path = argv[1]
 
@@ -21,8 +42,17 @@ def main():
     input_dim = 6 * 7  # Board size
     output_dim = 7     # One output for each column
 
+
+    layer_dims =  get_hidden_layer_dimensions(agent_path)
+    print(layer_dims)
+    layer_dims = layer_dims.replace(',', ' ')
+    layer_dims_string = layer_dims.strip('[]')
+    layer_dims_string = [int(dim) for dim in layer_dims_string.split()]
+    print(layer_dims_string)
+
     # Initialize and load the trained agent
-    agent = DQNAgent(input_dim, output_dim)
+    agent = DQNAgent(input_dim, output_dim, layer_dims_string)
+
     #agent.load_state_dict(torch.load('agent1_weights.pth'))
 
     agent.load_state_dict(torch.load(agent_path))
@@ -47,8 +77,10 @@ def main():
 
         if done:
             env.render()  # Show the final board
-            if reward == 1:  # Assuming reward of 1 for a win
+            if reward == 1.5:  # Assuming reward of 1 for a win
                 print(f"Player {env.winner} wins!")
+            elif reward == -1:
+                print(f"Human wins!")
             else:
                 print("It's a draw!")
 

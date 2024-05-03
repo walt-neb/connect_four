@@ -323,7 +323,7 @@ def main():
     with open(replay_buffer_filename, 'wb') as f:
         pickle.dump(replay_buffer, f)
 
-    '''
+ 
     # Print the sizes of the saved models
     checkpoint_a1 = torch.load(agent1_filename)
     for key, tensor in checkpoint_a1.items():
@@ -331,7 +331,7 @@ def main():
     checkpoint_a2 = torch.load(agent2_filename)
     for key, tensor in checkpoint_a2.items():
         print(f"{agent2_filename}: {key}: {tensor.size()}")               
-    '''
+
 
     print(f'models saved for both agents, to agent1_weights_{hyp_file_root}.wts and agent2_weights_{hyp_file_root}.wts')
     print(f'replay buffer saved to {replay_buffer_filename}')
