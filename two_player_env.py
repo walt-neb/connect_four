@@ -51,7 +51,7 @@ class ConnectFour:
             self.winner = None  # Draw
             reward = 0.3  # Draw is less rewarding than a win
         elif self.winner != self.current_player:
-            reward = -1
+            reward = -1.0
         else:
             reward = 0  # Game continues, no intermediate rewards
 

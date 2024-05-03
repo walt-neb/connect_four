@@ -277,8 +277,8 @@ def main():
             print(f'Agent 2 replay buffer size: {len(replay_buffer2)}')
             print(f'Player 1 Turns  ->  Agent 1: {agent_1_starts}')
             print(f'                    Agent 2: {agent_2_starts}')
-            print(f'Current Rewards ->  Agent 1: {agent_1_reward}')
-            print(f'                    Agent 2: {agent_2_reward}')
+            print(f'Rewards ->  Agent 1:{reward1} / {agent_1_reward}')
+            print(f'Rewards ->  Agent 2:{reward2} / {agent_2_reward}')
             if episode > 0:
                 print(f'Win Rates -> Agent 1: {agent_1_score/episode:.4f}')
                 print(f'             Agent 2: {agent_2_score/episode:.4f}')
