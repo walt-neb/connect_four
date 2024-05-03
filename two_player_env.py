@@ -45,11 +45,11 @@ class ConnectFour:
         if self.check_win(player=self.current_player):
             self.done = True
             self.winner = self.current_player
-            reward = 1  # Win
+            reward = 1.5  # Win
         elif np.all(self.board != 0):
             self.done = True
             self.winner = None  # Draw
-            reward = 0.0  # Draw is less rewarding than a win
+            reward = 0.3  # Draw is less rewarding than a win
         elif self.winner != self.current_player:
             reward = -1
         else:

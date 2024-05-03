@@ -18,11 +18,5 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-# Replay buffer parameters
-buffer_capacity = 10000
-batch_size = 64
 
-# Initialize replay buffers for both agents
-replay_buffer1 = ReplayBuffer(buffer_capacity)
-replay_buffer2 = ReplayBuffer(buffer_capacity)
 
