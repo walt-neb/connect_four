@@ -137,6 +137,8 @@ dbmode=1
 
 def main():
 
+    print(f'torch.cuda.is_available()={torch.cuda.is_available()}')
+
     if len(sys.argv) < 2:
         print("Usage: python train.py <hyperparameters_file> <agent1_weights> <agent2_weights> <replay_buffer>")
         return
@@ -146,6 +148,7 @@ def main():
     writer = SummaryWriter(f'runs/{hyp_file_root}_connect_four_experiment')
     params = load_hyperparams(hyp_file)
     print_parameters(params)
+
     try:
         agent_1_layer_dims_string = params["agent_1_layer_dims"].strip('[]')
         agent_1_layer_dims_string = [int(dim) for dim in agent_1_layer_dims_string.split()]
@@ -166,11 +169,16 @@ def main():
         agent1, agent2, replay_buffer = load_agents_and_buffer(agent_1_layer_dims_string, agent_2_layer_dims_string, sys.argv[2], sys.argv[3])
     else:
         agent1, agent2, replay_buffer = load_agents_and_buffer(agent_1_layer_dims_string, agent_2_layer_dims_string)  
-
-
+    
+    
+    # Move agents to GPU if available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #agent1.to(device)
+    #agent2.to(device)
     # Optimizers
     optimizer1 = optim.Adam(agent1.parameters(), lr=params["agent1_learning_rate"])
     optimizer2 = optim.Adam(agent2.parameters(), lr=params["agent1_learning_rate"])
+
 
     # Environment
     env = ConnectFour()
@@ -196,6 +204,7 @@ def main():
 
     for episode in range(num_episodes):
         state, active_agent = env.reset()
+
         done = False
         total_loss1 = 0
         total_loss2 = 0
@@ -215,6 +224,8 @@ def main():
             valid_actions = env.get_valid_actions()
             epsilon1 = agent1.get_epsilon(epsilon_step_count, num_episodes, params["a1_epsilon_start"], params["a1_epsilon_end"])
             epsilon2 = agent2.get_epsilon(epsilon_step_count, num_episodes, params["a2_epsilon_start"], params["a2_epsilon_end"])
+            
+            
             # Determine which agent is playing
             if active_agent == 1:
                 action = agent1.select_action(state, valid_actions, epsilon1)
