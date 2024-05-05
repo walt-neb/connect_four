@@ -1,0 +1,29 @@
+
+
+#filename: hyps_15.txt
+
+end_episode =70002
+max_replay_buffer_size = 5500
+
+agent1_learning_rate = 0.0015
+agent2_learning_rate = 0.0015
+
+agent_1_layer_dims = [128 128 64 64 64]
+agent_2_layer_dims = [32 32 32 32 32 32]
+
+console_status_interval = 200
+tensorboard_status_interval = 20
+render_game_at = [70001]
+
+a1_epsilon_start = 0.5 
+a1_epsilon_end   = 0.4
+a2_epsilon_start = 0.5
+a2_epsilon_end   = 0.4
+
+
+batch_size = 128
+gamma = 0.97
+noise = 0.1
+
+
+

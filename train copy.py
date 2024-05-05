@@ -66,8 +66,6 @@ def load_agents_and_buffer(a1_layer_dims, a2_layer_dims, agent1_wts=None, agent2
     print(f'a2_layer_dims: {a2_layer_dims}')
     agent1 = DQNAgent(input_dim, output_dim, a1_layer_dims)
     agent2 = DQNAgent(input_dim, output_dim, a2_layer_dims)
-
-
     replay_buffer = deque(maxlen=10000)  # Adjust size as needed
 
     # Load weights if paths are provided
@@ -105,37 +103,29 @@ def load_agents_and_buffer(a1_layer_dims, a2_layer_dims, agent1_wts=None, agent2
     return agent1, agent2, replay_buffer
 
 
-def soft_update(target_model, source_model, tau=0.005):
-    """
-    Softly update the target model's weights using the weights from the source model.
-    tau is a small coefficient.
-    """
-    for target_param, param in zip(target_model.parameters(), source_model.parameters()):
-        target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)        
-
-def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, episode, done=False):
+def train(agent, optimizer, replay_buffer, batch_size):
+    # Early exit if not enough data in the replay buffer
     if len(replay_buffer) < batch_size:
-        return torch.tensor(0.0) # Not enough samples to train so return 0 loss
-
+        return torch.tensor(0.0, device=agent.device)  # Ensure tensor is on the correct device
+    
     transitions = replay_buffer.sample(batch_size)
     batch = list(zip(*transitions))
 
-    states = torch.tensor(np.array(batch[0]), dtype=torch.float32)
-    actions = torch.tensor(batch[1], dtype=torch.long)
-    rewards = torch.tensor(batch[2], dtype=torch.float32)
-    next_states = torch.tensor(np.array(batch[3]), dtype=torch.float32)
-    dones = torch.tensor(batch[4], dtype=torch.bool)
+    states = torch.stack([state.to(dtype=torch.float32, device=agent.device) for state in batch[0]])
+    actions = torch.tensor(batch[1], dtype=torch.long, device=agent.device)
+    rewards = torch.tensor(batch[2], dtype=torch.float32, device=agent.device)
+    next_states = torch.tensor(np.array(batch[3]), dtype=torch.float32, device=agent.device)
+    dones = torch.tensor(batch[4], dtype=torch.bool, device=agent.device)
 
-    # Current Q values use the main network
+    # Current Q values
     curr_q_values = agent(states).gather(1, actions.unsqueeze(1)).squeeze(1)
-    # Next Q values use the target network
-    next_q_values = agent_tgt(next_states).max(1)[0]
+    # Next Q values
+    next_q_values = agent(next_states).max(1)[0]
     next_q_values[dones] = 0  # No next state if the game is done
 
-    # Compute the target Q values using the Bellman equation
+    # Compute the target Q values
     target_q_values = rewards + (0.99 * next_q_values)
-
-    # Calculate the MSE loss
+    # Loss
     loss = nn.MSELoss()(curr_q_values, target_q_values)
 
     # Gradient descent
@@ -148,7 +138,8 @@ dbmode=1
 
 def main():
 
-    print(f'torch.cuda.is_available()={torch.cuda.is_available()}')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     if len(sys.argv) < 2:
         print("Usage: python train.py <hyperparameters_file> <agent1_weights> <agent2_weights> <replay_buffer>")
@@ -181,14 +172,11 @@ def main():
     else:
         agent1, agent2, replay_buffer = load_agents_and_buffer(agent_1_layer_dims_string, agent_2_layer_dims_string)  
     
-    # Create target networks for policy stabilization
-    agent1_tgt = agent1
-    agent2_tgt = agent2
-
+    
     # Move agents to GPU if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #agent1.to(device)
-    #agent2.to(device)
+    # Load agents and ensure they and their components are on the correct device
+    agent1.to(device)
+    agent2.to(device)
     # Optimizers
     optimizer1 = optim.Adam(agent1.parameters(), lr=params["agent1_learning_rate"])
     optimizer2 = optim.Adam(agent2.parameters(), lr=params["agent1_learning_rate"])
@@ -205,7 +193,7 @@ def main():
     replay_buffer1 = ReplayBuffer(buffer_capacity)
     replay_buffer2 = ReplayBuffer(buffer_capacity)
 
-    episode_framecount = 0
+    epsilon_step_count = 0
 
     agent_1_score = 0
     agent_2_score = 0
@@ -214,7 +202,6 @@ def main():
     agent_2_starts = 0
     agent_1_reward = 0
     agent_2_reward = 0
-    update_frequency = 1000
 
 
     for episode in range(num_episodes):
@@ -225,7 +212,8 @@ def main():
         total_loss2 = 0
         num_steps1 = 0
         num_steps2 = 0
-        episode_framecount += 1
+        epsilon_step_count += 1
+
         if active_agent == 1:
             agent_1_starts += 1
         else:
@@ -237,30 +225,33 @@ def main():
         while not done:
             logthis = False
             valid_actions = env.get_valid_actions()
-            epsilon1 = agent1.get_epsilon(episode_framecount, num_episodes, params["a1_epsilon_start"], params["a1_epsilon_end"])
-            epsilon2 = agent2.get_epsilon(episode_framecount, num_episodes, params["a2_epsilon_start"], params["a2_epsilon_end"])
+            epsilon1 = agent1.get_epsilon(epsilon_step_count, num_episodes, params["a1_epsilon_start"], params["a1_epsilon_end"])
+            epsilon2 = agent2.get_epsilon(epsilon_step_count, num_episodes, params["a2_epsilon_start"], params["a2_epsilon_end"])
             
             
             # Determine which agent is playing
             if active_agent == 1:
                 action = agent1.select_action(state, valid_actions, epsilon1)
                 next_state, reward1, done, next_player = env.step(action)
-                replay_buffer1.push(state, action, reward1, next_state, done)
-                loss1 = train(agent1, agent1_tgt, optimizer1, replay_buffer1, batch_size, episode, done)
-                # Update target network using soft updates
-                if episode % update_frequency == 0:
-                    soft_update(agent1_tgt, agent1, .05)
-                
+                next_state = torch.tensor(next_state, dtype=torch.float32, device=device)  # Convert next_state to tensor immediately after getting it
+
+                replay_buffer1.push(state, action, reward1, next_state.cpu().numpy(), done)  # Only convert to numpy here when pushing to buffer
+
+                # Training call
+                loss1 = train(agent1, optimizer1, replay_buffer1, batch_size)
                 if loss1 is not None:
-                    total_loss1 += loss1.item()
-                    num_steps1 += 1
+                        total_loss1 += loss1.item()  # accumulate the total loss
+                        num_steps1 += 1
+
             else:
                 action = agent2.select_action(state, valid_actions, epsilon2)
                 next_state, reward2, done, next_player = env.step(action)
-                replay_buffer2.push(state, action, reward2, next_state, done)
-                loss2 = train(agent2, agent2_tgt, optimizer2, replay_buffer2, batch_size, episode, done)
+                next_state = torch.tensor(next_state, device=device, dtype=torch.float32)  # ensure next_state is on the correct device
+
+                replay_buffer2.push(state, action, reward2, next_state.cpu().numpy(), done)  # convert to numpy before pushing
+                loss2 = train(agent2, optimizer2, replay_buffer2, batch_size)
                 if loss2 is not None:
-                    total_loss2 += loss2.item()
+                    total_loss2 += loss2.item()  # accumulate the total loss
                     num_steps2 += 1
 
             if episode in render_games: 
@@ -335,8 +326,8 @@ def main():
 
         if done and episode % 1000 == 0:
             print(f'saving models and replay buffer at episode {episode}')
-            torch.save(agent1.state_dict(), f'agent1_{hyp_file_root}.pth')
-            torch.save(agent2.state_dict(), f'agent2_{hyp_file_root}.pth')
+            torch.save(agent1.state_dict(), f'agent1_weights_{hyp_file_root}.pth')
+            torch.save(agent2.state_dict(), f'agent2_weights_{hyp_file_root}.pth')
             with open(f'replay_buffer_{hyp_file_root}.pkl', 'wb') as f:
                 pickle.dump(replay_buffer, f)
 
@@ -345,8 +336,8 @@ def main():
 
 
     print(f'\nTraining is done! The agents have played {num_episodes} episodes.')
-    agent1_filename = f'agent1_{hyp_file_root}.wts'
-    agent2_filename = f'agent2_{hyp_file_root}.wts'
+    agent1_filename = f'agent1_weights_{hyp_file_root}.wts'
+    agent2_filename = f'agent2_weights_{hyp_file_root}.wts'
     replay_buffer_filename = f'replay_buffer_{hyp_file_root}.pkl'
     torch.save(agent1.state_dict(), agent1_filename)
     torch.save(agent2.state_dict(), agent2_filename)
