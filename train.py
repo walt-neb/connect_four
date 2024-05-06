@@ -21,6 +21,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from collections import deque
+import torch
+import pickle
 
 
 
@@ -57,6 +59,39 @@ def print_parameters(params):
     print("*** Training Parameters: ")
     for key, value in params.items():
         print(f"\t\t{key} = {value}")
+
+
+def save_checkpoint(model, optimizer, replay_buffer, episode, checkpoint_path):
+    # Save model state
+    model_state = {
+        'state_dict': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'episode': episode  # Include the episode number
+    }
+    torch.save(model_state, checkpoint_path + '_model.ckpt')
+
+    # Save replay buffer and episode number using pickle
+    buffer_state = {
+        'replay_buffer': replay_buffer,
+        'episode': episode
+    }
+    with open(checkpoint_path + '_buffer.pkl', 'wb') as f:
+        pickle.dump(buffer_state, f)
+
+def load_checkpoint(checkpoint_path, model, optimizer, device):
+    # Load model state
+    model_checkpoint = torch.load(checkpoint_path + '_model.ckpt', map_location=device)
+    model.load_state_dict(model_checkpoint['state_dict'])
+    optimizer.load_state_dict(model_checkpoint['optimizer'])
+    episode = model_checkpoint['episode']
+
+    # Load replay buffer
+    with open(checkpoint_path + '_buffer.pkl', 'rb') as f:
+        buffer_state = pickle.load(f)
+    replay_buffer = buffer_state['replay_buffer']
+    assert episode == buffer_state['episode'], "Episode mismatch between model and buffer state."
+
+    return model, optimizer, replay_buffer, episode
 
 def load_agents_and_buffer(a1_layer_dims, a2_layer_dims, agent1_wts=None, agent2_wts=None, rp_buffer_file=None):
     # Initialize agents
@@ -113,10 +148,11 @@ def soft_update(target_model, source_model, tau=0.005):
     for target_param, param in zip(target_model.parameters(), source_model.parameters()):
         target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)        
 
-def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, episode, done=False):
+def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
     if len(replay_buffer) < batch_size:
-        return torch.tensor(0.0) # Not enough samples to train so return 0 loss
+        return torch.tensor(0.0)  # Not enough samples to train so return 0 loss
 
+    # Double DQN training
     transitions = replay_buffer.sample(batch_size)
     batch = list(zip(*transitions))
 
@@ -126,14 +162,18 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, episode, done=
     next_states = torch.tensor(np.array(batch[3]), dtype=torch.float32)
     dones = torch.tensor(batch[4], dtype=torch.bool)
 
-    # Current Q values use the main network
+    # Current Q values using the main network
     curr_q_values = agent(states).gather(1, actions.unsqueeze(1)).squeeze(1)
-    # Next Q values use the target network
-    next_q_values = agent_tgt(next_states).max(1)[0]
+
+    # Select best actions in next states using the main network
+    next_actions = agent(next_states).argmax(1, keepdim=True)
+
+    # Evaluate these next actions using the target network
+    next_q_values = agent_tgt(next_states).gather(1, next_actions).squeeze(1)
     next_q_values[dones] = 0  # No next state if the game is done
 
     # Compute the target Q values using the Bellman equation
-    target_q_values = rewards + (0.99 * next_q_values)
+    target_q_values = rewards + (gamma * next_q_values)
 
     # Calculate the MSE loss
     loss = nn.MSELoss()(curr_q_values, target_q_values)
@@ -142,6 +182,7 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, episode, done=
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
+
     return loss
 
 dbmode=1
@@ -154,7 +195,7 @@ def main():
         print("Usage: python train.py <hyperparameters_file> <agent1_weights> <agent2_weights> <replay_buffer>")
         return
     hyp_file = sys.argv[1]
-    hyp_file_root = hyp_file.rstrip('.txt')
+    hyp_file_root = hyp_file.rstrip('.hyp')
 
     writer = SummaryWriter(f'runs/{hyp_file_root}_connect_four_experiment')
     params = load_hyperparams(hyp_file)
@@ -198,7 +239,7 @@ def main():
     env = ConnectFour()
 
     # Main training loop
-    num_episodes = params["end_episode"]
+    end_episode = params["end_episode"]
     batch_size = params["batch_size"]
     buffer_capacity = params["max_replay_buffer_size"]
 
@@ -215,11 +256,17 @@ def main():
     agent_1_reward = 0
     agent_2_reward = 0
     update_frequency = 1000
+    gamma = params["gamma"]
 
+    start_episode = 0
 
-    for episode in range(num_episodes):
+    #agent1, optimizer1, replay_buffer, start_episode = load_checkpoint('path_to_checkpoint', agent1, optimizer1, device)
+
+    for episode in range(start_episode, end_episode):
         state, active_agent = env.reset()
 
+        active_agent = 1 # Start with agent 1
+        
         done = False
         total_loss1 = 0
         total_loss2 = 0
@@ -237,16 +284,16 @@ def main():
         while not done:
             logthis = False
             valid_actions = env.get_valid_actions()
-            epsilon1 = agent1.get_epsilon(episode_framecount, num_episodes, params["a1_epsilon_start"], params["a1_epsilon_end"])
-            epsilon2 = agent2.get_epsilon(episode_framecount, num_episodes, params["a2_epsilon_start"], params["a2_epsilon_end"])
+            epsilon1 = agent1.get_epsilon(episode_framecount, end_episode, params["a1_epsilon_start"], params["a1_epsilon_end"])
+            epsilon2 = agent2.get_epsilon(episode_framecount, end_episode, params["a2_epsilon_start"], params["a2_epsilon_end"])
             
             
             # Determine which agent is playing
             if active_agent == 1:
                 action = agent1.select_action(state, valid_actions, epsilon1)
-                next_state, reward1, done, next_player = env.step(action)
-                replay_buffer1.push(state, action, reward1, next_state, done)
-                loss1 = train(agent1, agent1_tgt, optimizer1, replay_buffer1, batch_size, episode, done)
+                next_state, reward, done, next_player = env.step(action)
+                replay_buffer1.push(state, action, reward, next_state, done)
+                loss1 = train(agent1, agent1_tgt, optimizer1, replay_buffer1, batch_size, gamma)
                 # Update target network using soft updates
                 if episode % update_frequency == 0:
                     soft_update(agent1_tgt, agent1, .05)
@@ -256,21 +303,19 @@ def main():
                     num_steps1 += 1
             else:
                 action = agent2.select_action(state, valid_actions, epsilon2)
-                next_state, reward2, done, next_player = env.step(action)
-                replay_buffer2.push(state, action, reward2, next_state, done)
-                loss2 = train(agent2, agent2_tgt, optimizer2, replay_buffer2, batch_size, episode, done)
+                next_state, reward, done, next_player = env.step(action)
+                replay_buffer2.push(state, action, reward, next_state, done)
+                loss2 = train(agent2, agent2_tgt, optimizer2, replay_buffer2, batch_size, gamma)
                 if loss2 is not None:
                     total_loss2 += loss2.item()
                     num_steps2 += 1
 
             if episode in render_games: 
                 logthis = True
-                print(f"Episode {episode}, Step {num_steps1 + num_steps2}")
-                print(f"Agent {active_agent} ({env.get_player_symbol(active_agent)}) action: {action}")
-                winner = env.render()    
-                if winner is not None:
-                    print(f"Winner: Agent {winner}")            
-                print(f"----------------------")
+                print(f"----Episode {episode} Step {num_steps1 + num_steps2}")                
+                winner = env.render() 
+                print(f"Agent {active_agent} playing ({env.get_player_symbol(active_agent)}) takes action {action} receives reward of {reward}")   
+                #input("Press key to continue...")
 
             if not done:
                 state = next_state
@@ -280,22 +325,22 @@ def main():
         # track the scores
         if env.winner == 1:
             agent_1_score += 1
-            agent_1_reward += reward1
+            agent_1_reward += reward
         elif env.winner == 2:
             agent_2_score += 1
-            agent_2_reward += reward2
+            agent_2_reward += reward
         elif env.winner == 0:
             draw_score += 1
 
-        print(f'Episode {episode} of {num_episodes} completed.')
+        print(f'Episode {episode} of {end_episode} completed.')
 
         if done and (episode % params["console_status_interval"] == 0 or logthis==True):  # Render end of the game for specified episodes
+            print(f'----Episode {episode} of {end_episode}--------')
+            winner = env.render()
             print(f"Episode {episode}, Step {num_steps1 + num_steps2}")
             print(f"Agent {active_agent} ({env.get_player_symbol(active_agent)}) action: {action}")
-            winner = env.render()
             if winner is not None:
-                print(f"Winner: Agent {winner}")  
-            print(f'-----------Episode {episode} of {num_episodes}-------------------')
+                print(f"Agent {winner} wins")  
             print(f'Agent 1: {agent_1_score}')
             print(f'Agent 2: {agent_2_score}, Draws: {draw_score}')
             print(f'Agent 1 epsilon: {epsilon1}')
@@ -303,12 +348,14 @@ def main():
             if num_steps1 > 0 and num_steps2 > 0:
                 print(f'Agent 1 loss: {total_loss1 / num_steps1}')
                 print(f'Agent 2 loss: {total_loss2 / num_steps2}')
-            print(f'Agent 1 replay buffer size: {len(replay_buffer1)}')
-            print(f'Agent 2 replay buffer size: {len(replay_buffer2)}')
-            print(f'Player 1 Turns  ->  Agent 1: {agent_1_starts}')
-            print(f'                    Agent 2: {agent_2_starts}')
-            print(f'Rewards ->  Agent 1:{reward1} / {agent_1_reward}')
-            print(f'Rewards ->  Agent 2:{reward2} / {agent_2_reward}')
+            #print(f'Agent 1 replay buffer size: {len(replay_buffer1)}')
+            #print(f'Agent 2 replay buffer size: {len(replay_buffer2)}')
+            if agent_2_starts > 0:
+                print(f'A1 over A2 as Player1: {agent_1_starts/agent_2_starts:.3f}')
+            print(f'A1 reward - A2 reward: {agent_1_reward - agent_2_reward:.3f}')
+            if agent_2_reward > 0:
+                print(f'A1 reward // A2 reward: {agent_1_reward / agent_2_reward:.3f}')
+
             if episode > 0:
                 print(f'Win Rates -> Agent 1: {agent_1_score/episode:.4f}')
                 print(f'             Agent 2: {agent_2_score/episode:.4f}')
@@ -319,32 +366,23 @@ def main():
                 average_loss1 = total_loss1 / num_steps1
                 writer.add_scalar('Agent 1/Ave_Loss', average_loss1, episode)
                 writer.add_scalar('Agent 1/Scores', agent_1_score, episode)
-                writer.add_scalar('Agent 1/Reward', agent_1_reward, episode)
-                print(f"Agent 1 Average Loss: {average_loss1:.7f}")
-            if num_steps2 > 0:
-                average_loss2 = total_loss2 / num_steps2
-                writer.add_scalar('Agent 2/Ave_Loss', average_loss2, episode)
-                writer.add_scalar('Agent 2/Scores', agent_2_score, episode)
-                writer.add_scalar('Agent 2/Reward', agent_2_reward, episode)
-                print(f"Agent 2 Average Loss: {average_loss2:.7f}")      
+            if agent_2_starts > 0:
+                writer.add_scalar('Comp/Ratios/Agent_1_over_Agent_2_as_Player1', agent_1_starts / agent_2_starts, episode)
+            writer.add_scalar('Comp/Differences/Agent_1_reward_minus_Agent_2_reward', agent_1_reward - agent_2_reward, episode)
+            if agent_2_reward > 0:
+                writer.add_scalar('Comp/Ratios/Agent_1_reward_divided_by_Agent_2_reward', agent_1_reward / agent_2_reward, episode)
+            if episode > 0:
+                writer.add_scalar('Comp/Win Rates/Agent_1', agent_1_score / episode, episode)
+                writer.add_scalar('Comp/Win Rates/Agent_2', agent_2_score / episode, episode)
 
-            writer.add_scalar('Agent 1/ReplayBufferSize', len(replay_buffer1), episode)
-            writer.add_scalar('Agent 2/ReplayBufferSize', len(replay_buffer2), episode)
-            writer.add_scalar('Agent 1/Epsilon', epsilon1, episode)
-            writer.add_scalar('Agent 2/Epsilon', epsilon2, episode)                          
-
-        if done and episode % 1000 == 0:
-            print(f'saving models and replay buffer at episode {episode}')
-            torch.save(agent1.state_dict(), f'agent1_{hyp_file_root}.pth')
-            torch.save(agent2.state_dict(), f'agent2_{hyp_file_root}.pth')
-            with open(f'replay_buffer_{hyp_file_root}.pkl', 'wb') as f:
-                pickle.dump(replay_buffer, f)
+            save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
+            save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
 
 
     writer.close()
 
 
-    print(f'\nTraining is done! The agents have played {num_episodes} episodes.')
+    print(f'\nTraining is done! The agents have played {end_episode} episodes.')
     agent1_filename = f'agent1_{hyp_file_root}.wts'
     agent2_filename = f'agent2_{hyp_file_root}.wts'
     replay_buffer_filename = f'replay_buffer_{hyp_file_root}.pkl'
@@ -360,10 +398,12 @@ def main():
         print(f"{agent1_filename}: {key}: {tensor.size()}")   
     checkpoint_a2 = torch.load(agent2_filename)
     for key, tensor in checkpoint_a2.items():
-        print(f"{agent2_filename}: {key}: {tensor.size()}")               
+        print(f"{agent2_filename}: {key}: {tensor.size()}")    
+
+                       
 
 
-    print(f'models saved for both agents, to agent1_weights_{hyp_file_root}.wts and agent2_weights_{hyp_file_root}.wts')
+    print(f'models saved for both agents, agent1 to {agent1_filename}, agent2 to {agent2_filename}')
     print(f'replay buffer saved to {replay_buffer_filename}')
        
 

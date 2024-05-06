@@ -77,12 +77,12 @@ def main():
 
         if done:
             env.render()  # Show the final board
-            if reward == 1.5:  # Assuming reward of 1 for a win
-                print(f"Player {env.winner} wins!")
-            elif reward == -1:
-                print(f"Human wins!")
+            if env.winner == 1:  # Assuming reward of 1 for a win
+                print(f"Human wins")
+            elif env.winner == 2:
+                print(f"Computer wins")
             else:
-                print("It's a draw!")
+                print("It's a draw...")
 
 def get_human_action(env):
     valid_actions = env.get_valid_actions()

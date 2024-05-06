@@ -41,19 +41,26 @@ class ConnectFour:
         row = max(np.where(self.board[:, action] == 0)[0])
         self.board[row, action] = self.current_player
 
+        # print('board:', self.board)
+        # print(f'row: {row}, column: {action}, self.board[row, action]: {self.board[row, action]}')
+        # print(f'current_player: {self.current_player}')
+
+        last_move = (row, action)
+
+
+        reward = self.reward_for_blocking(self.board, self.current_player, last_move)
+        if reward > 0:
+            print(f"Player {self.current_player} gets blocking reward: {reward:.2f}")
+
         # Check game status
         if self.check_win(player=self.current_player):
             self.done = True
             self.winner = self.current_player
-            reward = 1.5  # Win
+            reward += 2.5  # Win
         elif np.all(self.board != 0):
             self.done = True
             self.winner = None  # Draw
-            reward = 0.3  # Draw is less rewarding than a win
-        elif self.winner != self.current_player:
-            reward = -1.0
-        else:
-            reward = 0  # Game continues, no intermediate rewards
+            reward = +0.3  # Draw is less rewarding than a win
 
         # Prepare for next step
         self.current_player = 3 - self.current_player  # Switch player between 1 and 2
@@ -128,4 +135,85 @@ class ConnectFour:
         print()
 
         return self.winner
-        
+    
+    def reward_for_blocking(self, board, player, last_move):
+        '''
+        Reward the player for blocking the opponent's three-in-a-row.
+        :param board: 2D list representing the Connect Four board.
+        :param player: The current player (1 for X, 2 for O).
+        :param last_move: Tuple (row, column) where the player just placed their piece.
+        :return: float, reward value.
+        '''
+        opponent = 2 if player == 1 else 1
+        rows = len(board)
+        cols = len(board[0])
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]  # Horizontal, Vertical, Diagonal Down-right, Diagonal Down-left
+        reward = 0
+
+        r, c = last_move
+
+        for dr, dc in directions:
+            for sign in [1, -1]:  # Check both directions from the piece
+                sequence = 0
+                # Check up to three pieces away from the last move in the current direction
+                for i in range(1, 4):
+                    nr, nc = r + dr * i * sign, c + dc * i * sign
+                    if 0 <= nr < rows and 0 <= nc < cols:
+                        if board[nr][nc] == opponent:
+                            sequence += 1
+                        else:
+                            break  # Stop if a non-opponent piece is encountered
+                    else:
+                        break  # Stop if out of bounds
+
+                # Check if the sequence was exactly three and is blocked by the player's last move
+                if sequence == 3:
+                    # Check the space before the sequence (in the opposite direction)
+                    prev_r, prev_c = r - dr * sign, c - dc * sign
+                    if 0 <= prev_r < rows and 0 <= prev_c < cols:
+                        if board[prev_r][prev_c] == 0:
+                            reward += 1  # Reward for blocking
+                            break  # No need to check further in this direction
+
+        return reward
+    
+
+        '''
+    def reward_for_blocking(self, board, player):
+        """
+        This function calculates the reward for blocking an opponent's three in a row.
+        :param board: 2D list representing the Connect Four board.
+        :param player: integer, 1 if the function is calculating for player 1, or 2 for player 2.
+        :return: float, reward value.
+        """
+        opponent = 2 if player == 1 else 1
+        rows = len(board)
+        cols = len(board[0])
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]  # Horizontal, Vertical, Diagonal Down-right, Diagonal Down-left
+        reward = 0
+
+        for r in range(rows):
+            for c in range(cols):
+                if board[r][c] == 0:  # Only consider empty cells for potential blocking
+                    for dr, dc in directions:
+                        count = 0
+                        for i in range(1, 4):  # Check next three positions in the direction
+                            nr, nc = r + dr * i, c + dc * i
+                            if 0 <= nr < rows and 0 <= nc < cols:
+                                if board[nr][nc] == opponent:
+                                    count += 1
+                                elif board[nr][nc] == player:
+                                    count = 0  # Reset if player's piece is found
+                                    break
+                            else:
+                                break  # Out of bounds
+                        if count == 3:
+                            # Check for empty space on either side of the three in a row
+                            before_r, before_c = r - dr, c - dc
+                            after_r, after_c = r + dr * 4, c + dc * 4
+                            if (0 <= before_r < rows and 0 <= before_c < cols and board[before_r][before_c] == 0) or \
+                            (0 <= after_r < rows and 0 <= after_c < cols and board[after_r][after_c] == 0):
+                                reward += 1  # Reward for blocking an opponent's three-in-a-row
+
+        return reward
+'''
