@@ -23,6 +23,7 @@ import torch.optim as optim
 from collections import deque
 import torch
 import pickle
+from torch.utils.tensorboard import SummaryWriter
 
 
 
@@ -266,7 +267,7 @@ def main():
         state, active_agent = env.reset()
 
         active_agent = 1 # Start with agent 1
-        
+
         done = False
         total_loss1 = 0
         total_loss2 = 0
@@ -360,8 +361,24 @@ def main():
                 print(f'Win Rates -> Agent 1: {agent_1_score/episode:.4f}')
                 print(f'             Agent 2: {agent_2_score/episode:.4f}')
 
+            agent1_filename = f'agent1_{hyp_file_root}.wts'
+            agent2_filename = f'agent2_{hyp_file_root}.wts'
+
         if done and (episode % params["tensorboard_status_interval"] == 0 or logthis==True): 
-            # log the average loss to TensorBoard
+            writer.add_scalar(f'Agent 1: {agent_1_score}')
+            writer.add_scalar(f'Agent 2: {agent_2_score}, Draws: {draw_score}', episode)
+            writer.add_scalar(f'Agent 1 epsilon: {epsilon1}', episode)
+            writer.add_scalar(f'Agent 2 epsilon: {epsilon2}', episode)
+            if num_steps1 > 0 and num_steps2 > 0:
+                writer.add_scalar(f'Agent 1 loss: {total_loss1 / num_steps1}', episode)
+                writer.add_scalar(f'Agent 2 loss: {total_loss2 / num_steps2}', episode)
+            writer.add_scalar(f'Agent 2 replay buffer size: {len(replay_buffer2)}', episode)
+            if agent_2_reward > 0:
+                writer.add_scalar(f'A1/A2 reward: {agent_1_reward / agent_2_reward:.3f}', episode)
+
+            if episode > 0:
+                writer.add_scalar(f'Win Rates -> Agent 1: {agent_1_score/episode:.4f}', episode)
+                writer.add_scalar(f'             Agent 2: {agent_2_score/episode:.4f}', episode)
             if num_steps1 > 0:
                 average_loss1 = total_loss1 / num_steps1
                 writer.add_scalar('Agent 1/Ave_Loss', average_loss1, episode)
@@ -375,8 +392,17 @@ def main():
                 writer.add_scalar('Comp/Win Rates/Agent_1', agent_1_score / episode, episode)
                 writer.add_scalar('Comp/Win Rates/Agent_2', agent_2_score / episode, episode)
 
-            save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
-            save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
+            if done and (episode % params["ckpt_interval"] == 0):   
+                agent1_filename = f'agent1_{hyp_file_root}.wts'
+                agent2_filename = f'agent2_{hyp_file_root}.wts'
+                print(f'\nSaving model weights to {agent1_filename}')
+                torch.save(agent1.state_dict(), agent1_filename)
+                torch.save(agent2.state_dict(), agent2_filename)
+
+                # redundent save_checkpoint(agent1, optimizer1, replay_buffer1, episode, f'{hyp_file_root}_1.ckpt')
+                # we need to switch over to this method, but retain the separate model weight files for play.py
+                save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
+                save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
 
 
     writer.close()
