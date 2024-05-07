@@ -365,29 +365,37 @@ def main():
             agent2_filename = f'agent2_{hyp_file_root}.wts'
 
         if done and (episode % params["tensorboard_status_interval"] == 0 or logthis==True): 
-            writer.add_scalar(f'Agent 1/ Score {agent_1_score}', episode)
-            writer.add_scalar(f'Agent 2/ Score {agent_2_score}', episode)
-            writer.add_scalar(f'Agent 1/ epsilon: {epsilon1}', episode)
-            writer.add_scalar(f'Agent 2/ epsilon: {epsilon2}', episode)
+            # Correct the scalar tags to be consistent and not include dynamic values
+            writer.add_scalar('Agent 1/Score', agent_1_score, episode)
+            writer.add_scalar('Agent 2/Score', agent_2_score, episode)
+            writer.add_scalar('Agent 1/Epsilon', epsilon1, episode)
+            writer.add_scalar('Agent 2/Epsilon', epsilon2, episode)
+
             if num_steps1 > 0 and num_steps2 > 0:
-                writer.add_scalar(f'Agent 1/ loss: {total_loss1 / num_steps1}', episode)
-                writer.add_scalar(f'Agent 2/ loss: {total_loss2 / num_steps2}', episode)
-            writer.add_scalar(f'Agent 2/ replay buffer size: {len(replay_buffer2)}', episode)
+                writer.add_scalar('Agent 1/Loss', total_loss1 / num_steps1, episode)
+                writer.add_scalar('Agent 2/Loss', total_loss2 / num_steps2, episode)
+
+            writer.add_scalar('Agent 2/Replay Buffer Size', len(replay_buffer2), episode)
+
             if agent_2_reward > 0:
-                writer.add_scalar(f'Comp/ A1/A2 reward: {agent_1_reward / agent_2_reward:.3f}', episode)
+                writer.add_scalar('Comp/A1_A2 Reward Ratio', agent_1_reward / agent_2_reward, episode)
 
             if episode > 0:
-                writer.add_scalar(f'Agent 1/ Win Rates: {agent_1_score/episode:.4f}', episode)
-                writer.add_scalar(f'Agent 2/ Win Rates: {agent_2_score/episode:.4f}', episode)
+                writer.add_scalar('Agent 1/Win Rate', agent_1_score/episode, episode)
+                writer.add_scalar('Agent 2/Win Rate', agent_2_score/episode, episode)
+
             if num_steps1 > 0:
                 average_loss1 = total_loss1 / num_steps1
-                writer.add_scalar('Agent 1/ Ave_Loss', average_loss1, episode)
-                writer.add_scalar('Agent 1/ Scores', agent_1_score, episode)
+                writer.add_scalar('Agent 1/Average Loss', average_loss1, episode)
+                writer.add_scalar('Agent 1/Scores', agent_1_score, episode)
+
             if agent_2_starts > 0:
-                writer.add_scalar('Comp/ Ratios/Agent_1_over_Agent_2_as_Player1', agent_1_starts / agent_2_starts, episode)
-            writer.add_scalar('Comp/ Draws', draw_score, episode)
+                writer.add_scalar('Comp/Ratio Agent_1_over_Agent_2 as Player1', agent_1_starts / agent_2_starts, episode)
+
+            writer.add_scalar('Comp/Draws', draw_score, episode)
+
             if agent_2_reward > 0:
-                writer.add_scalar('Comp/ Ratios/Agent_1_reward_divided_by_Agent_2_reward', agent_1_reward / agent_2_reward, episode)
+                writer.add_scalar('Comp/Ratio Agent_1_to_Agent_2 Reward', agent_1_reward / agent_2_reward, episode)
 
             if done and (episode % params["ckpt_interval"] == 0):   
                 agent1_filename = f'agent1_{hyp_file_root}.wts'
