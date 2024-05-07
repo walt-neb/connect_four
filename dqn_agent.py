@@ -8,9 +8,13 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+
 class DQNAgent(nn.Module):
+
     def __init__(self, input_dim, output_dim, hidden_layers):
         super(DQNAgent, self).__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"DQN Agent Using device: {self.device}")
         layers = []
 
         # Create the first layer from input dimension to the first hidden layer size
