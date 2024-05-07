@@ -12,6 +12,7 @@ class ConnectFour:
         self.current_player = 1  # for now, gets updated on reset
         self.done = False
         self.winner = None
+        self.total_steps = 0 
 
     def get_player_symbol(self, current_player):
         """
@@ -41,31 +42,29 @@ class ConnectFour:
         row = max(np.where(self.board[:, action] == 0)[0])
         self.board[row, action] = self.current_player
 
-        # print('board:', self.board)
-        # print(f'row: {row}, column: {action}, self.board[row, action]: {self.board[row, action]}')
-        # print(f'current_player: {self.current_player}')
-
         last_move = (row, action)
 
+        reward = 0
+        reward += self.reward_for_blocking(self.board, self.current_player, last_move)
+        reward += self.reward_for_opportunities(self.board, self.current_player, last_move)
+        reward += self.reward_for_forcing(self.board, self.current_player, last_move)
+        reward += self.reward_for_futile_moves(self.board, action)
 
-        reward = self.reward_for_blocking(self.board, self.current_player, last_move)
-        if reward > 0:
-            print(f"Player {self.current_player} gets blocking reward: {reward:.2f}")
-
-        # Check game status
+        # Check if the current move wins the game
         if self.check_win(player=self.current_player):
             self.done = True
             self.winner = self.current_player
-            reward += 2.5  # Win
+            reward += 10  # Substantial reward for winning
         elif np.all(self.board != 0):
             self.done = True
-            self.winner = None  # Draw
-            reward = +0.3  # Draw is less rewarding than a win
+            self.winner = None
+            reward += 1  # Minor reward for draw
 
-        # Prepare for next step
-        self.current_player = 3 - self.current_player  # Switch player between 1 and 2
+        # Switch player
+        self.current_player = 3 - self.current_player
 
         return self.board.flatten(), reward, self.done, self.current_player
+
     
     
 
@@ -177,43 +176,62 @@ class ConnectFour:
 
         return reward
     
-
-        '''
-    def reward_for_blocking(self, board, player):
-        """
-        This function calculates the reward for blocking an opponent's three in a row.
-        :param board: 2D list representing the Connect Four board.
-        :param player: integer, 1 if the function is calculating for player 1, or 2 for player 2.
-        :return: float, reward value.
-        """
-        opponent = 2 if player == 1 else 1
-        rows = len(board)
-        cols = len(board[0])
-        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]  # Horizontal, Vertical, Diagonal Down-right, Diagonal Down-left
+    def reward_for_opportunities(self, board, player, move):
         reward = 0
-
-        for r in range(rows):
-            for c in range(cols):
-                if board[r][c] == 0:  # Only consider empty cells for potential blocking
-                    for dr, dc in directions:
-                        count = 0
-                        for i in range(1, 4):  # Check next three positions in the direction
-                            nr, nc = r + dr * i, c + dc * i
-                            if 0 <= nr < rows and 0 <= nc < cols:
-                                if board[nr][nc] == opponent:
-                                    count += 1
-                                elif board[nr][nc] == player:
-                                    count = 0  # Reset if player's piece is found
-                                    break
-                            else:
-                                break  # Out of bounds
-                        if count == 3:
-                            # Check for empty space on either side of the three in a row
-                            before_r, before_c = r - dr, c - dc
-                            after_r, after_c = r + dr * 4, c + dc * 4
-                            if (0 <= before_r < rows and 0 <= before_c < cols and board[before_r][before_c] == 0) or \
-                            (0 <= after_r < rows and 0 <= after_c < cols and board[after_r][after_c] == 0):
-                                reward += 1  # Reward for blocking an opponent's three-in-a-row
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]  # vertical, horizontal, diagonal, anti-diagonal
+        for d in directions:
+            count = 1  # start with the current piece
+            for step in [1, -1]:
+                for i in range(1, 4):
+                    r = move[0] + step * i * d[0]
+                    c = move[1] + step * i * d[1]
+                    if 0 <= r < board.shape[0] and 0 <= c < board.shape[1] and board[r, c] == player:
+                        count += 1
+                    else:
+                        break
+            if count == 2:
+                reward += 0.1  # small reward for creating a line of two
+            elif count == 3:
+                reward += 0.5  # larger reward for creating a line of three
 
         return reward
-'''
+
+    def reward_for_forcing(self, board, player, move):
+        opponent = 3 - player
+        forced_moves = 0
+        # Check around the last move
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]  # vertical, horizontal, diagonal, anti-diagonal
+        for d in directions:
+            potential_threats = 0
+            for step in [1, -1]:
+                for i in range(1, 4):
+                    r = move[0] + step * i * d[0]
+                    c = move[1] + step * i * d[1]
+                    if 0 <= r < board.shape[0] and 0 <= c < board.shape[1]:
+                        if board[r, c] == opponent:
+                            break
+                        if board[r, c] == 0:
+                            potential_threats += 1
+                            break
+            if potential_threats == 1:
+                forced_moves += 1
+
+        return 0.2 * forced_moves if forced_moves > 0 else 0
+
+    def reward_for_futile_moves(self, board, action):
+        # Check if the column is nearly full (i.e., only the top cell is empty).
+        if board[1, action] != 0:
+            # Assume a default penalty for a nearly full column
+            penalty = -0.1
+
+            # Check if this move creates a direct opportunity to win in the next turn
+            # which would make it not a futile move.
+            # We temporarily simulate placing one more piece in the same column.
+            if board[0, action] == 0:  # Just to be safe, we check if the top is still open
+                board[0, action] = self.current_player  # Temporarily place piece
+                if self.check_win(player=self.current_player):  # Check for a win condition
+                    penalty = 0  # No penalty if it can lead to a win next turn
+                board[0, action] = 0  # Reset the top cell
+
+            return penalty
+        return 0

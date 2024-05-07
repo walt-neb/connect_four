@@ -375,14 +375,13 @@ def main():
                 writer.add_scalar('Agent 1/Loss', total_loss1 / num_steps1, episode)
                 writer.add_scalar('Agent 2/Loss', total_loss2 / num_steps2, episode)
 
-            writer.add_scalar('Agent 2/Replay Buffer Size', len(replay_buffer2), episode)
-
-            if agent_2_reward > 0:
-                writer.add_scalar('Comp/A1_A2 Reward Ratio', agent_1_reward / agent_2_reward, episode)
-
             if episode > 0:
                 writer.add_scalar('Agent 1/Win Rate', agent_1_score/episode, episode)
                 writer.add_scalar('Agent 2/Win Rate', agent_2_score/episode, episode)
+                writer.add_scalar('Agent 2/Replay Buffer Size', len(replay_buffer2), episode)
+                writer.add_scalar('Comp/A1 reward/episode', agent_1_reward / episode, episode)
+                writer.add_scalar('Comp/A2 reward/episode', agent_2_reward / episode, episode)
+                writer.add_scalar('Comp/A1/A2 rpe', (agent_1_reward/episode)/(agent_2_reward/episode), episode)
 
             if num_steps1 > 0:
                 average_loss1 = total_loss1 / num_steps1
