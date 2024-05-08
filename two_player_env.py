@@ -60,18 +60,21 @@ class TwoPlayerConnectFourEnv():
             reward += value
             # if value != 0:
             #     print(f'player {self.current_player}: {key}0 {value}')
-            self.writer.add_scalar(f'Env/{key}_player_{self.current_player}', value, self.total_steps)
+            if self.writer is not None:
+                self.writer.add_scalar(f'Env/{key}_player_{self.current_player}', value, self.total_steps)
 
         # Win check
         if self.check_win(player=self.current_player):
             reward += 2 # Reward for winning is larger
             self.done = True
             self.winner = self.current_player
-            self.writer.add_scalar(f'Env/Win_player_{self.current_player}', 1, self.total_steps)
+            if self.writer is not None:
+                self.writer.add_scalar(f'Env/Win_player_{self.current_player}', 1, self.total_steps)
         elif np.all(self.board != 0):
             self.done = True
             self.winner = None
-            self.writer.add_scalar('Env/Draw', 1, self.total_steps)
+            if self.writer is not None:
+                self.writer.add_scalar('Env/Draw', 1, self.total_steps)
         
         self.current_player = 3 - self.current_player
         self.total_steps += 1
