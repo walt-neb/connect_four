@@ -4,6 +4,8 @@
 runs/
 *.pkl
 *.pth
+*.wts
+*.ckpt
 
 
 # But do not ignore .gitignore and other root files

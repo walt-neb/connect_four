@@ -3,8 +3,12 @@
 import numpy as np
 import random
 
-class ConnectFour:
-    def __init__(self, rows=6, columns=7, win_length=4):
+from torch.utils.tensorboard import SummaryWriter
+
+
+
+class TwoPlayerConnectFourEnv():
+    def __init__(self, rows=6, columns=7, win_length=4, writer=None):
         self.rows = rows
         self.columns = columns
         self.win_length = win_length
@@ -13,6 +17,7 @@ class ConnectFour:
         self.done = False
         self.winner = None
         self.total_steps = 0 
+        self.writer = writer  # Store the SummaryWriter instance
 
     def get_player_symbol(self, current_player):
         """
@@ -32,41 +37,49 @@ class ConnectFour:
         return self.board.flatten(), self.current_player
 
     def step(self, action):
-        """ Place a piece in the chosen column. """
         if self.done:
             raise ValueError("Game is over.")
         if self.board[0, action] != 0:
             raise ValueError("Column is full.")
 
-        # Find the lowest empty spot in the column
         row = max(np.where(self.board[:, action] == 0)[0])
         self.board[row, action] = self.current_player
-
         last_move = (row, action)
-
+        
+        # Initial reward calculation
         reward = 0
-        reward += self.reward_for_blocking(self.board, self.current_player, last_move)
-        reward += self.reward_for_opportunities(self.board, self.current_player, last_move)
-        reward += self.reward_for_forcing(self.board, self.current_player, last_move)
-        reward += self.reward_for_futile_moves(self.board, action)
+        reward_details = {
+            'blocking': self.reward_for_blocking(self.board, self.current_player, last_move),
+            'opportunities': self.reward_for_opportunities(self.board, self.current_player, last_move),
+            'forcing': self.reward_for_forcing(self.board, self.current_player, last_move),
+            'futile_moves': self.reward_for_futile_moves(self.board, action)
+            #'advanced_patterns': self.reward_for_advanced_patterns(self.board, self.current_player, last_move)
+        }
 
-        # Check if the current move wins the game
+        for key, value in reward_details.items():
+            reward += value
+            # if value != 0:
+            #     print(f'player {self.current_player}: {key}0 {value}')
+            self.writer.add_scalar(f'Env/{key}_player_{self.current_player}', value, self.total_steps)
+
+        # Win check
         if self.check_win(player=self.current_player):
+            reward += 2 # Reward for winning is larger
             self.done = True
             self.winner = self.current_player
-            reward += 10  # Substantial reward for winning
+            self.writer.add_scalar(f'Env/Win_player_{self.current_player}', 1, self.total_steps)
         elif np.all(self.board != 0):
             self.done = True
             self.winner = None
-            reward += 1  # Minor reward for draw
-
-        # Switch player
+            self.writer.add_scalar('Env/Draw', 1, self.total_steps)
+        
         self.current_player = 3 - self.current_player
+        self.total_steps += 1
 
         return self.board.flatten(), reward, self.done, self.current_player
 
-    
-    
+
+
 
     def check_win(self, player):
         # Horizontal, vertical, and diagonal checks
@@ -216,13 +229,13 @@ class ConnectFour:
             if potential_threats == 1:
                 forced_moves += 1
 
-        return 0.2 * forced_moves if forced_moves > 0 else 0
+        return 0.4 * forced_moves if forced_moves > 0 else 0
 
     def reward_for_futile_moves(self, board, action):
         # Check if the column is nearly full (i.e., only the top cell is empty).
         if board[1, action] != 0:
             # Assume a default penalty for a nearly full column
-            penalty = -0.1
+            penalty = -0.2
 
             # Check if this move creates a direct opportunity to win in the next turn
             # which would make it not a futile move.
@@ -235,3 +248,32 @@ class ConnectFour:
 
             return penalty
         return 0
+    
+
+    def reward_for_advanced_patterns(self, board, player, move):
+        reward = 0
+        directions = [(1, 0), (0, 1), (1, 1), (-1, 1)]  # vertical, horizontal, diagonal, anti-diagonal
+        threat_count = 0
+
+        # Expand the check to include the initial position and extend further in both directions
+        for d in directions:
+            for step in [1, -1]:  # Check both directions
+                sequence = 0
+                for i in range(-3, 4):  # Expand range to check from three steps back to three steps forward
+                    r = move[0] + i * d[0] * step
+                    c = move[1] + i * d[1] * step
+                    if 0 <= r < board.shape[0] and 0 <= c < board.shape[1]:
+                        if board[r, c] == player:
+                            sequence += 1
+                        else:
+                            if sequence >= 3:  # Check if the sequence length before breaking is a threat
+                                threat_count += 1
+                            sequence = 0
+
+        reward = 0.1 * threat_count  # Reward each threat detected
+        print(f"Debugging - Threats: {threat_count}, Reward: {reward}")
+        return reward
+
+
+    
+

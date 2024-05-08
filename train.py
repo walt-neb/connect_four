@@ -11,7 +11,7 @@ import pickle
 import numpy as np
 import dqn_agent
 from dqn_agent import DQNAgent 
-from two_player_env import ConnectFour
+from two_player_env import TwoPlayerConnectFourEnv
 from replay_buffer import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 
@@ -195,12 +195,13 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python train.py <hyperparameters_file> <agent1_weights> <agent2_weights> <replay_buffer>")
         return
+    
     hyp_file = sys.argv[1]
     hyp_file_root = hyp_file.rstrip('.hyp')
 
-    writer = SummaryWriter(f'runs/{hyp_file_root}_connect_four_experiment')
     params = load_hyperparams(hyp_file)
     print_parameters(params)
+    writer = SummaryWriter(f'runs/{hyp_file_root}_connect_four_experiment')
 
     try:
         agent_1_layer_dims_string = params["agent_1_layer_dims"].strip('[]')
@@ -237,7 +238,7 @@ def main():
 
 
     # Environment
-    env = ConnectFour()
+    env = TwoPlayerConnectFourEnv(writer=writer)
 
     # Main training loop
     end_episode = params["end_episode"]
@@ -266,7 +267,7 @@ def main():
     for episode in range(start_episode, end_episode):
         state, active_agent = env.reset()
 
-        active_agent = 1 # Start with agent 1
+        #active_agent = 1 # Start with agent 1
 
         done = False
         total_loss1 = 0
@@ -375,7 +376,7 @@ def main():
                 writer.add_scalar('Agent 1/Loss', total_loss1 / num_steps1, episode)
                 writer.add_scalar('Agent 2/Loss', total_loss2 / num_steps2, episode)
 
-            if episode > 0:
+            if False and episode > 0:
                 writer.add_scalar('Agent 1/Win Rate', agent_1_score/episode, episode)
                 writer.add_scalar('Agent 2/Win Rate', agent_2_score/episode, episode)
                 writer.add_scalar('Agent 2/Replay Buffer Size', len(replay_buffer2), episode)
@@ -383,12 +384,11 @@ def main():
                 writer.add_scalar('Comp/A2 reward/episode', agent_2_reward / episode, episode)
                 writer.add_scalar('Comp/A1/A2 rpe', (agent_1_reward/episode)/(agent_2_reward/episode), episode)
 
-            if num_steps1 > 0:
-                average_loss1 = total_loss1 / num_steps1
-                writer.add_scalar('Agent 1/Average Loss', average_loss1, episode)
-                writer.add_scalar('Agent 1/Scores', agent_1_score, episode)
 
-            if agent_2_starts > 0:
+            steps_per_game = (num_steps1 + num_steps2)
+            writer.add_scalar('Comp/StepsPerGame', steps_per_game, episode)
+
+            if False and agent_2_starts > 0:
                 writer.add_scalar('Comp/Ratio Agent_1_over_Agent_2 as Player1', agent_1_starts / agent_2_starts, episode)
 
             writer.add_scalar('Comp/Draws', draw_score, episode)
@@ -399,14 +399,16 @@ def main():
             if done and (episode % params["ckpt_interval"] == 0):   
                 agent1_filename = f'agent1_{hyp_file_root}.wts'
                 agent2_filename = f'agent2_{hyp_file_root}.wts'
-                print(f'\nSaving model weights to {agent1_filename}')
+                replay_buffer_filename = f'replay_buffer_{hyp_file_root}.pkl'
                 torch.save(agent1.state_dict(), agent1_filename)
                 torch.save(agent2.state_dict(), agent2_filename)
+                with open(replay_buffer_filename, 'wb') as f:
+                    pickle.dump(replay_buffer, f)
 
                 # redundent save_checkpoint(agent1, optimizer1, replay_buffer1, episode, f'{hyp_file_root}_1.ckpt')
                 # we need to switch over to this method, but retain the separate model weight files for play.py
-                save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
-                save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
+                #save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
+                #save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
 
 
     writer.close()
