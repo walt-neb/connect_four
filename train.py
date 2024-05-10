@@ -1,6 +1,8 @@
 
 
 #filename:  train.py
+
+
 import cProfile
 import pstats
 import time
@@ -24,7 +26,6 @@ from collections import deque
 import torch
 import pickle
 from torch.utils.tensorboard import SummaryWriter
-
 
 
 def load_hyperparams(hyp_file):
@@ -141,6 +142,7 @@ def load_agents_and_buffer(a1_layer_dims, a2_layer_dims, agent1_wts=None, agent2
     return agent1, agent2, replay_buffer
 
 
+
 def soft_update(target_model, source_model, tau=0.005):
     """
     Softly update the target model's weights using the weights from the source model.
@@ -148,6 +150,7 @@ def soft_update(target_model, source_model, tau=0.005):
     """
     for target_param, param in zip(target_model.parameters(), source_model.parameters()):
         target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)        
+
 
 def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
     if len(replay_buffer) < batch_size:
@@ -362,8 +365,7 @@ def main():
                 print(f'Win Rates -> Agent 1: {agent_1_score/episode:.4f}')
                 print(f'             Agent 2: {agent_2_score/episode:.4f}')
 
-            agent1_filename = f'agent1_{hyp_file_root}.wts'
-            agent2_filename = f'agent2_{hyp_file_root}.wts'
+
 
         if done and (episode % params["tensorboard_status_interval"] == 0 or logthis==True): 
             # Correct the scalar tags to be consistent and not include dynamic values
@@ -397,9 +399,9 @@ def main():
                 writer.add_scalar('Comp/Ratio Agent_1_to_Agent_2 Reward', agent_1_reward / agent_2_reward, episode)
 
             if done and (episode % params["ckpt_interval"] == 0):   
-                agent1_filename = f'agent1_{hyp_file_root}.wts'
-                agent2_filename = f'agent2_{hyp_file_root}.wts'
-                replay_buffer_filename = f'replay_buffer_{hyp_file_root}.pkl'
+                agent1_filename = f'./wts/model1_{hyp_file_root}.wts'
+                agent2_filename = f'./wts/model2_{hyp_file_root}.wts'
+                replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}.pkl'
                 torch.save(agent1.state_dict(), agent1_filename)
                 torch.save(agent2.state_dict(), agent2_filename)
                 with open(replay_buffer_filename, 'wb') as f:
@@ -415,9 +417,9 @@ def main():
 
 
     print(f'\nTraining is done! The agents have played {end_episode} episodes.')
-    agent1_filename = f'agent1_{hyp_file_root}.wts'
-    agent2_filename = f'agent2_{hyp_file_root}.wts'
-    replay_buffer_filename = f'replay_buffer_{hyp_file_root}.pkl'
+    agent1_filename = f'./wts/model1_{hyp_file_root}.wts'
+    agent2_filename = f'./wts/model2_{hyp_file_root}.wts'
+    replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}.pkl'
     torch.save(agent1.state_dict(), agent1_filename)
     torch.save(agent2.state_dict(), agent2_filename)
     with open(replay_buffer_filename, 'wb') as f:
@@ -430,12 +432,10 @@ def main():
         print(f"{agent1_filename}: {key}: {tensor.size()}")   
     checkpoint_a2 = torch.load(agent2_filename)
     for key, tensor in checkpoint_a2.items():
-        print(f"{agent2_filename}: {key}: {tensor.size()}")    
-
-                       
+        print(f"{agent2_filename}: {key}: {tensor.size()}")                           
 
 
-    print(f'models saved for both agents, agent1 to {agent1_filename}, agent2 to {agent2_filename}')
+    print(f'models saved for both agents, ./wts/{agent1_filename}, and ./wts/{agent2_filename}')
     print(f'replay buffer saved to {replay_buffer_filename}')
        
 

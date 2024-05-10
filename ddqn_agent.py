@@ -44,14 +44,15 @@ class DQNAgent(nn.Module):
     def select_action(self, state_list, valid_actions, epsilon):
         if random.random() > epsilon:
             with torch.no_grad():
-                states_tensor = torch.tensor([state_list], dtype=torch.float32)  # Ensure it's a batch of one
+                # Ensure it's a batch of one and moved to the correct device
+                states_tensor = torch.tensor([state_list], dtype=torch.float32, device=self.device)
 
                 # Get Q-values
                 q_values = self.forward(states_tensor)
 
                 # Create a mask to invalidate actions
-                inf_mask = torch.full_like(q_values, float('inf'))  # Create a mask with 'inf'
-                valid_mask = torch.zeros_like(q_values)  # Assume all actions are invalid first
+                inf_mask = torch.full_like(q_values, float('inf'), device=self.device)  # Make sure mask is on the same device
+                valid_mask = torch.zeros_like(q_values, device=self.device)  # Assume all actions are invalid first
                 valid_mask[0, valid_actions] = 1  # Set valid actions to 1
 
                 # Apply mask: Set invalid actions to negative infinity
@@ -62,4 +63,5 @@ class DQNAgent(nn.Module):
                 return chosen_action
         else:
             return random.choice(valid_actions)  # Randomly choose from valid actions
+
 

@@ -157,28 +157,17 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     
     if len(replay_buffer) < batch_size:
-        return torch.tensor(0.0)  # Not enough samples to train so return 0 loss
+        return torch.tensor(0.0, device=device)  # Not enough samples to train so return 0 loss
 
-    # Double DQN training
+    # Sample a batch from the replay buffer
     transitions = replay_buffer.sample(batch_size)
     batch = list(zip(*transitions))
 
-    state, action, reward, next_state, done = batch
-
-    state = state.to(device)
-    action = action.to(device)
-    reward = reward.to(device)
-    next_state = next_state.to(device)
-    done = done.to(device)
-
-    state_action_values = agent(state, action).to(device)
-    target_state_action_values = agent_tgt(next_state).to(device)
-
-    states = torch.tensor(np.array(batch[0]), dtype=torch.float32)
-    actions = torch.tensor(batch[1], dtype=torch.long)
-    rewards = torch.tensor(batch[2], dtype=torch.float32)
-    next_states = torch.tensor(np.array(batch[3]), dtype=torch.float32)
-    dones = torch.tensor(batch[4], dtype=torch.bool)
+    states = torch.tensor(np.array(batch[0]), dtype=torch.float32).to(device)
+    actions = torch.tensor(batch[1], dtype=torch.long).to(device)
+    rewards = torch.tensor(batch[2], dtype=torch.float32).to(device)
+    next_states = torch.tensor(np.array(batch[3]), dtype=torch.float32).to(device)
+    dones = torch.tensor(batch[4], dtype=torch.bool).to(device)
 
     # Current Q values using the main network
     curr_q_values = agent(states).gather(1, actions.unsqueeze(1)).squeeze(1)
@@ -196,10 +185,6 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
     # Calculate the MSE loss
     loss = nn.MSELoss()(curr_q_values, target_q_values)
 
-    # Update the optimizer.
-    for param in optimizer.parameters():
-        param.data = param.data.to(device)
-
     # Gradient descent
     optimizer.zero_grad()
     loss.backward()
@@ -207,10 +192,11 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
 
     return loss
 
+
 dbmode=1
 
 
-def main(hyps):
+def main():
 
     print(f'torch.cuda.is_available()={torch.cuda.is_available()}')
 
@@ -220,6 +206,8 @@ def main(hyps):
     
     hyp_file = sys.argv[1]
     hyp_file_root = hyp_file.rstrip('.hyp')
+    hyp_file_root = os.path.basename(hyp_file_root)
+    print(f'hyp_file_root: {hyp_file_root}')
 
     params = load_hyperparams(hyp_file)
     print_parameters(params)
@@ -297,7 +285,7 @@ def main(hyps):
     update_frequency = 1000
     gamma = params["gamma"]
 
-    start_episode = 250003
+    start_episode = 0
 
     #agent1, optimizer1, replay_buffer, start_episode = load_checkpoint('path_to_checkpoint', agent1, optimizer1, device)
 
@@ -399,8 +387,7 @@ def main(hyps):
                 print(f'Win Rates -> Agent 1: {agent_1_score/episode:.4f}')
                 print(f'             Agent 2: {agent_2_score/episode:.4f}')
 
-            agent1_filename = f'agent1_{hyp_file_root}.wts'
-            agent2_filename = f'agent2_{hyp_file_root}.wts'
+
 
         if done and (episode % params["tensorboard_status_interval"] == 0 or logthis==True): 
             # Correct the scalar tags to be consistent and not include dynamic values
@@ -434,9 +421,9 @@ def main(hyps):
                 writer.add_scalar('Comp/Ratio Agent_1_to_Agent_2 Reward', agent_1_reward / agent_2_reward, episode)
 
             if done and (episode % params["ckpt_interval"] == 0):   
-                agent1_filename = f'agent1_{hyp_file_root}.wts'
-                agent2_filename = f'agent2_{hyp_file_root}.wts'
-                replay_buffer_filename = f'replay_buffer_{hyp_file_root}.pkl'
+                agent1_filename = f'./wts/model1_{hyp_file_root}.wts'
+                agent2_filename = f'./wts/model2_{hyp_file_root}.wts'
+                replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}.pkl'
                 torch.save(agent1.state_dict(), agent1_filename)
                 torch.save(agent2.state_dict(), agent2_filename)
                 with open(replay_buffer_filename, 'wb') as f:
@@ -452,9 +439,9 @@ def main(hyps):
 
 
     print(f'\nTraining is done! The agents have played {end_episode} episodes.')
-    agent1_filename = f'agent1_{hyp_file_root}.wts'
-    agent2_filename = f'agent2_{hyp_file_root}.wts'
-    replay_buffer_filename = f'replay_buffer_{hyp_file_root}.pkl'
+    agent1_filename = f'./wts/model1_{hyp_file_root}.wts'
+    agent2_filename = f'./wts/model2_{hyp_file_root}.wts'
+    replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}.pkl'
     torch.save(agent1.state_dict(), agent1_filename)
     torch.save(agent2.state_dict(), agent2_filename)
     with open(replay_buffer_filename, 'wb') as f:
@@ -470,20 +457,9 @@ def main(hyps):
         print(f"{agent2_filename}: {key}: {tensor.size()}")    
 
                        
-
-
-    print(f'models saved for both agents, agent1 to {agent1_filename}, agent2 to {agent2_filename}')
+    print(f'models saved for both agents, ./wts/{agent1_filename}, and ./wts/{agent2_filename}')
     print(f'replay buffer saved to {replay_buffer_filename}')
        
-
-
-
-
-
-
-
-
-
 
 
 if __name__ == '__main__':
