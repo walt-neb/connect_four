@@ -3,8 +3,9 @@
 
 #filename:  train.py
 
-
+import curses
 import cProfile
+import datetime
 import pstats
 import time
 
@@ -198,6 +199,7 @@ dbmode=1
 
 def main():
 
+    start_time = datetime.datetime.now()
     print(f'torch.cuda.is_available()={torch.cuda.is_available()}')
 
     if len(sys.argv) < 2:
@@ -284,6 +286,7 @@ def main():
     agent_2_reward = 0
     update_frequency = 1000
     gamma = params["gamma"]
+    ave_steps_per_game = 10
 
     start_episode = 0
 
@@ -410,6 +413,7 @@ def main():
 
 
             steps_per_game = (num_steps1 + num_steps2)
+            ave_steps_per_game = 0.98*ave_steps_per_game + 0.02*steps_per_game
             writer.add_scalar('Comp/StepsPerGame', steps_per_game, episode)
 
             if False and agent_2_starts > 0:
@@ -434,6 +438,9 @@ def main():
                 #save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
                 #save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
 
+            if check_e_keypress():
+                print('Keyboard Keypress -e- detected, exiting training loop')
+                break
 
     writer.close()
 
@@ -449,18 +456,57 @@ def main():
 
  
     # Print the sizes of the saved models
-    checkpoint_a1 = torch.load(agent1_filename)
-    for key, tensor in checkpoint_a1.items():
-        print(f"{agent1_filename}: {key}: {tensor.size()}")   
-    checkpoint_a2 = torch.load(agent2_filename)
-    for key, tensor in checkpoint_a2.items():
-        print(f"{agent2_filename}: {key}: {tensor.size()}")    
+    # checkpoint_a1 = torch.load(agent1_filename)
+    # for key, tensor in checkpoint_a1.items():
+    #     print(f"{agent1_filename}: {key}: {tensor.size()}")   
+    # checkpoint_a2 = torch.load(agent2_filename)
+    # for key, tensor in checkpoint_a2.items():
+    #     print(f"{agent2_filename}: {key}: {tensor.size()}")    
 
                        
-    print(f'models saved for both agents, ./wts/{agent1_filename}, and ./wts/{agent2_filename}')
+    end_time = datetime.datetime.now()
+    elapsed_time = end_time - start_time                       
+
+    test_results_string = '\n\n----------- Training Results ----------------\n' 
+    test_results_string += f'Started training at: \t{start_time.strftime("%Y-%m-%d  %H:%M:%S")}\n'
+    test_results_string += f'Ended training at: \t{end_time.strftime("%Y-%m-%d  %H:%M:%S")}\n'
+    test_results_string += f'Total training time:  {str(elapsed_time)}\n'
+    test_results_string += f'Episode count: {episode}\n'
+    test_results_string += f'Comp/Ratio Agent_1_to_Agent_2 Reward {agent_1_reward / agent_2_reward}\n'
+    test_results_string += f'Ave steps per game: {ave_steps_per_game:.2f}\n'
+    test_results_string += f'total_loss1 / num_steps1: {total_loss1 / num_steps1}\n'
+    test_results_string += f'total_loss2 / num_steps2: {total_loss2 / num_steps2}\n'
+
+
+    print(test_results_string)
+    save_test_results_with_hyps(hyp_file,test_results_string)
+
+
+    print(f'models saved for both agents, {agent1_filename}, and {agent2_filename}')
     print(f'replay buffer saved to {replay_buffer_filename}')
        
+def save_test_results_with_hyps(hyp_file, test_results_string):
+    try:
+        with open(hyp_file, 'r+') as file:
+            #append to the end of the file
+            file.seek(0, os.SEEK_END)
+            file.write(f'{test_results_string}\n')  # Write the "new results"
+    except Exception as e:
+        print(e)
 
+
+
+def check_e_keypress():
+    stdscr = curses.initscr()
+    curses.cbreak()
+    stdscr.nodelay(1)  # set getch() non-blocking
+    key = stdscr.getch()
+    curses.endwin()
+    if key != ord('e'):  
+        return False
+    else:
+        return True
+            
 
 if __name__ == '__main__':
     start_time = time.time()

@@ -427,15 +427,15 @@ def main():
 
  
     # Print the sizes of the saved models
-    checkpoint_a1 = torch.load(agent1_filename)
-    for key, tensor in checkpoint_a1.items():
-        print(f"{agent1_filename}: {key}: {tensor.size()}")   
-    checkpoint_a2 = torch.load(agent2_filename)
-    for key, tensor in checkpoint_a2.items():
-        print(f"{agent2_filename}: {key}: {tensor.size()}")                           
+    # checkpoint_a1 = torch.load(agent1_filename)
+    # for key, tensor in checkpoint_a1.items():
+    #     print(f"{agent1_filename}: {key}: {tensor.size()}")   
+    # checkpoint_a2 = torch.load(agent2_filename)
+    # for key, tensor in checkpoint_a2.items():
+    #     print(f"{agent2_filename}: {key}: {tensor.size()}")                           
 
 
-    print(f'models saved for both agents, ./wts/{agent1_filename}, and ./wts/{agent2_filename}')
+    print(f'models saved for both agents, {agent1_filename}, and {agent2_filename}')
     print(f'replay buffer saved to {replay_buffer_filename}')
        
 

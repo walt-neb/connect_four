@@ -1,6 +1,6 @@
 
 
-# filename: play.py
+# filename: play_human.py
 
 from sys import argv
 import torch
@@ -22,10 +22,12 @@ def get_hidden_layer_dimensions(agent_path):
     return hidden_layer_dims
 
 def load_agent(agent_path, input_dim, output_dim):
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
     layer_dims = get_hidden_layer_dimensions(agent_path)
     agent = DQNAgent(input_dim, output_dim, layer_dims)
-    agent.load_state_dict(torch.load(agent_path))
+    agent.load_state_dict(torch.load(agent_path, map_location=device))
     agent.eval()  # Set the network to evaluation mode
+    agent.to(device)  # Ensure the model is on the correct device
     return agent
 
 def get_human_action(env):
@@ -58,7 +60,6 @@ def main():
     # Load agents
     agent1 = load_agent(agent1_path, input_dim, output_dim)
 
-
     # Game stats
     wins = {1: 0, 2: 0, 'draws': 0}
     steps_per_game = []
@@ -72,15 +73,15 @@ def main():
             _ = env.render()
             step_count += 1
             if current_player == 1:
-                action = get_human_action(env) 
+                action = get_human_action(env)
             else:  # AI's turn
                 action = agent1.select_action(np.array(state), env.get_valid_actions(), 0) 
 
             state, _, done, current_player = env.step(action)
         
         _ = env.render()
-        #print if human or AI wins
-        if env.winner and num_games > 1:
+        # Print if human or AI wins
+        if env.winner:
             if env.winner == 1:
                 print('Human wins!')
             else:
@@ -95,7 +96,6 @@ def main():
             wins['draws'] += 1
 
     # Print results
-    
     print(f"Results after {num_games} games:")
     print(f"Human wins: {wins[1]}")
     print(f"Agent wins: {wins[2]}")
@@ -104,4 +104,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
