@@ -311,6 +311,7 @@ def main():
             #writer.add_scalar(f'agent_1_starts/agent_2_starts={agent_1_starts/agent_2_starts:.3f}', episode)
             pass
 
+        print(f'{hyp_file_root} ', end='')
         while not done:
             logthis = False
             valid_actions = env.get_valid_actions()
@@ -350,7 +351,7 @@ def main():
             if not done:
                 state = next_state
                 active_agent = next_player
-            print('.', end='')
+            #print('.', end='')
 
         # track the scores
         if env.winner == 1:
@@ -362,7 +363,7 @@ def main():
         elif env.winner == 0:
             draw_score += 1
 
-        print(f'Episode {episode} of {end_episode} completed.')
+        print(f'\t{num_steps1 + num_steps2} moves in \t{episode} of {end_episode}')
 
         if done and (episode % params["console_status_interval"] == 0 or logthis==True):  # Render end of the game for specified episodes
             print(f'----Episode {episode} of {end_episode}--------')
