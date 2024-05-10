@@ -1,0 +1,34 @@
+
+
+#filename: h20.hyp
+# used for RL training of DDQN for connect-four game play
+
+end_episode =550002
+max_replay_buffer_size = 20000
+
+agent1_learning_rate = 0.0005
+agent2_learning_rate = 0.0005
+
+agent_1_layer_dims = [512 256 128 128 64]
+agent_2_layer_dims = [128 128 64]
+
+console_status_interval = 500
+tensorboard_status_interval = 100
+ckpt_interval = 2500
+
+render_game_at = [1 250001]
+
+a1_epsilon_start = 0.10 
+a1_epsilon_end   = 0.01
+a2_epsilon_start = 0.1
+a2_epsilon_end   = 0.05
+
+
+batch_size = 256
+gamma = 0.98
+chkpt_interval =  1000
+
+noise = 0.1
+
+
+

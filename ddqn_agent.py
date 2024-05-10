@@ -1,6 +1,6 @@
 
 
-#filename: dqn_agent.py
+#filename: ddqqn_agent.py
 
 import math
 import random

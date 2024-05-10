@@ -1,6 +1,9 @@
 
 
+
 #filename:  train.py
+
+
 import cProfile
 import pstats
 import time
@@ -24,7 +27,6 @@ from collections import deque
 import torch
 import pickle
 from torch.utils.tensorboard import SummaryWriter
-
 
 
 def load_hyperparams(hyp_file):
@@ -141,6 +143,7 @@ def load_agents_and_buffer(a1_layer_dims, a2_layer_dims, agent1_wts=None, agent2
     return agent1, agent2, replay_buffer
 
 
+
 def soft_update(target_model, source_model, tau=0.005):
     """
     Softly update the target model's weights using the weights from the source model.
@@ -149,13 +152,27 @@ def soft_update(target_model, source_model, tau=0.005):
     for target_param, param in zip(target_model.parameters(), source_model.parameters()):
         target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)        
 
+
 def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    
     if len(replay_buffer) < batch_size:
         return torch.tensor(0.0)  # Not enough samples to train so return 0 loss
 
     # Double DQN training
     transitions = replay_buffer.sample(batch_size)
     batch = list(zip(*transitions))
+
+    state, action, reward, next_state, done = batch
+
+    state = state.to(device)
+    action = action.to(device)
+    reward = reward.to(device)
+    next_state = next_state.to(device)
+    done = done.to(device)
+
+    state_action_values = agent(state, action).to(device)
+    target_state_action_values = agent_tgt(next_state).to(device)
 
     states = torch.tensor(np.array(batch[0]), dtype=torch.float32)
     actions = torch.tensor(batch[1], dtype=torch.long)
@@ -179,6 +196,10 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
     # Calculate the MSE loss
     loss = nn.MSELoss()(curr_q_values, target_q_values)
 
+    # Update the optimizer.
+    for param in optimizer.parameters():
+        param.data = param.data.to(device)
+
     # Gradient descent
     optimizer.zero_grad()
     loss.backward()
@@ -188,7 +209,8 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
 
 dbmode=1
 
-def main():
+
+def main(hyps):
 
     print(f'torch.cuda.is_available()={torch.cuda.is_available()}')
 
@@ -216,6 +238,10 @@ def main():
     print(f'agent_2_layer_dims_string: {agent_2_layer_dims_string}')
     print(f'render_games: {render_games}')
 
+    
+
+
+
     # Check command line arguments
     if len(sys.argv) == 5:  # Expected: script name, agent1 weights, agent2 weights, buffer
         agent1, agent2, replay_buffer = load_agents_and_buffer(agent_1_layer_dims_string, agent_2_layer_dims_string, sys.argv[2], sys.argv[3], sys.argv[4])
@@ -224,14 +250,25 @@ def main():
     else:
         agent1, agent2, replay_buffer = load_agents_and_buffer(agent_1_layer_dims_string, agent_2_layer_dims_string)  
     
+
+    # Move agents to GPU if available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    agent1 = agent1.to(device)
+    agent2 = agent2.to(device)
+    
     # Create target networks for policy stabilization
     agent1_tgt = agent1
     agent2_tgt = agent2
 
-    # Move agents to GPU if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #agent1.to(device)
-    #agent2.to(device)
+    agent1_tgt = agent1_tgt.to(device)
+    agent2_tgt = agent2_tgt.to(device)
+    print(f'agent1.device: {agent1.device}')
+    print(f'agent2.device: {agent2.device}')
+    print(f'agent1_tgt.device: {agent1_tgt.device}')
+    print(f'agent2_tgt.device: {agent2_tgt.device}')
+
+
     # Optimizers
     optimizer1 = optim.Adam(agent1.parameters(), lr=params["agent1_learning_rate"])
     optimizer2 = optim.Adam(agent2.parameters(), lr=params["agent1_learning_rate"])
@@ -260,7 +297,7 @@ def main():
     update_frequency = 1000
     gamma = params["gamma"]
 
-    start_episode = 0
+    start_episode = 250003
 
     #agent1, optimizer1, replay_buffer, start_episode = load_checkpoint('path_to_checkpoint', agent1, optimizer1, device)
 
@@ -439,16 +476,18 @@ def main():
     print(f'replay buffer saved to {replay_buffer_filename}')
        
 
+
+
+
+
+
+
+
+
+
+
 if __name__ == '__main__':
     start_time = time.time()
     main()
     elapsed_time = time.time() - start_time
     print(f"Elapsed time: {elapsed_time} seconds")
-
-    #cProfile.run('main()', 'train_stats')
-    #p = pstats.Stats('train_stats')
-    #p.sort_stats('cumtime').print_stats()
-
-
-
-
