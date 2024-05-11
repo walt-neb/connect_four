@@ -6,6 +6,7 @@ runs/
 *.pth
 *.wts
 *.ckpt
+*.hyp 
 
 
 # But do not ignore .gitignore and other root files
