@@ -288,7 +288,7 @@ def main():
     gamma = params["gamma"]
     ave_steps_per_game = 10
 
-    start_episode = 0
+    start_episode = params["start_episode"]
 
     #agent1, optimizer1, replay_buffer, start_episode = load_checkpoint('path_to_checkpoint', agent1, optimizer1, device)
 
@@ -363,7 +363,7 @@ def main():
         elif env.winner == 0:
             draw_score += 1
 
-        print(f'\t{num_steps1 + num_steps2} moves in \t{episode} of {end_episode}')
+        print(f'\t{num_steps1 + num_steps2} moves in \t{episode} of {end_episode} Ave moves: {ave_steps_per_game:.3f}')
 
         if done and (episode % params["console_status_interval"] == 0 or logthis==True):  # Render end of the game for specified episodes
             print(f'----Episode {episode} of {end_episode}--------')
@@ -414,7 +414,7 @@ def main():
 
 
             steps_per_game = (num_steps1 + num_steps2)
-            ave_steps_per_game = 0.98*ave_steps_per_game + 0.02*steps_per_game
+            ave_steps_per_game = 0.9*ave_steps_per_game + 0.1*steps_per_game
             writer.add_scalar('Comp/StepsPerGame', steps_per_game, episode)
 
             if False and agent_2_starts > 0:
@@ -446,7 +446,7 @@ def main():
     writer.close()
 
 
-    print(f'\nTraining is done! The agents have played {end_episode} episodes.')
+    print(f'\nTraining ended on episode count: {episode}')
     agent1_filename = f'./wts/model1_{hyp_file_root}.wts'
     agent2_filename = f'./wts/model2_{hyp_file_root}.wts'
     replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}.pkl'
@@ -472,7 +472,12 @@ def main():
     test_results_string += f'Started training at: \t{start_time.strftime("%Y-%m-%d  %H:%M:%S")}\n'
     test_results_string += f'Ended training at: \t{end_time.strftime("%Y-%m-%d  %H:%M:%S")}\n'
     test_results_string += f'Total training time:  {str(elapsed_time)}\n'
+    test_results_string += f'start_episode: {start_episode}\n'
+    test_results_string += f'end_episode: {end_episode}\n'
     test_results_string += f'Episode count: {episode}\n'
+    test_results_string += f'agent1 end epsilon: {epsilon1}\n'
+    test_results_string += f'agent2 end epsilon: {epsilon2}\n'
+    test_results_string += f'Draws: {draw_score}\n'
     test_results_string += f'Comp/Ratio Agent_1_to_Agent_2 Reward {agent_1_reward / agent_2_reward}\n'
     test_results_string += f'Ave steps per game: {ave_steps_per_game:.2f}\n'
     test_results_string += f'total_loss1 / num_steps1: {total_loss1 / num_steps1}\n'
