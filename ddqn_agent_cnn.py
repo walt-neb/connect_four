@@ -20,33 +20,45 @@ class CNNDDQNAgent(nn.Module):
         super(CNNDDQNAgent, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Example convolutional layers setup
-        self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=3, stride=1, padding=1)  # Output: (16, 6, 7)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)  # Output: (32, 6, 7)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)  # Output: (64, 6, 7)
+        # Create convolutional layers dynamically
+        current_channels = input_channels
+        current_height = input_height
+        current_width = input_width
+        modules = []
+
+        for (out_channels, kernel_size, stride, padding) in conv_layers:
+            modules.append(nn.Conv2d(current_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding))
+            modules.append(nn.ReLU())  # Typically, a non-linear activation is added after each conv layer
+            current_channels = out_channels
+            current_height = (current_height + 2 * padding - kernel_size) // stride + 1
+            current_width = (current_width + 2 * padding - kernel_size) // stride + 1
+
+        self.conv = nn.Sequential(*modules)
 
         # Calculate the total number of features after flattening
-        self.num_flattened_features = 64 * 6 * 7  # Change dimensions according to actual output of conv layers
+        self.num_flattened_features = current_channels * current_height * current_width
         
         # Fully connected layers
-        fc_layers.insert(0, self.num_flattened_features)
-        layers = []
-        for i in range(1, len(fc_layers)):
-            layers.append(nn.Linear(fc_layers[i-1], fc_layers[i]))
-            layers.append(nn.ReLU())
-        self.fc = nn.Sequential(*layers)
+        all_fc_layers = [self.num_flattened_features] + fc_layers
+        fc_modules = []
+        for in_features, out_features in zip(all_fc_layers[:-1], all_fc_layers[1:]):
+            fc_modules.append(nn.Linear(in_features, out_features))
+            fc_modules.append(nn.ReLU())  # Adding ReLU activation after each fully connected layer
         
         # Output layer
-        self.out = nn.Linear(fc_layers[-1], output_dim)
+        fc_modules.append(nn.Linear(all_fc_layers[-1], output_dim))
+        self.fc = nn.Sequential(*fc_modules)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = x.view(-1, self.num_flattened_features)  # Flatten the tensor
-        x = self.fc(x)
-        x = self.out(x)
-        return x
+        # Pass input through convolutional layers
+        x = self.conv(x)
+        
+        # Flatten the output from the convolutional layers to feed into fully connected layers
+        x = x.view(-1, self.num_flattened_features)
+        
+        # Pass the flat data through fully connected layers
+        output = self.fc(x)
+        return output
 
     def get_epsilon(self, epsilon_step_count, num_episodes, initial_epsilon, minimum_epsilon):
         decay_rate = -math.log(minimum_epsilon / initial_epsilon) / num_episodes

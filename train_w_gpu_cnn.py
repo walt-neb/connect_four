@@ -235,22 +235,23 @@ def main():
     writer = SummaryWriter(f'runs/{hyp_file_root}_connect_four_experiment')
 
     try:
-        conv_layers_a1 = list(eval(params["conv_layers_a1"].strip('[]')))
-        conv_layers_a2 = list(eval(params["conv_layers_a2"].strip('[]')))  
-        fc_layers_a1 = list(eval(params["fc_layers_a1"].strip('[]')))
-        fc_layers_a2 = list(eval(params["fc_layers_a2"].strip('[]')))                    
+        cnn_a1 = list(eval(params["cnn_a1"].strip('[]')))
+        cnn_a2 = list(eval(params["cnn_a2"].strip('[]')))  
+        fc_a1 = list(eval(params["fc_a1"].strip('[]')))
+        fc_a2 = list(eval(params["fc_a2"].strip('[]')))                    
         render_games = eval(params["render_game_at"].strip('[]'))
     except Exception as e:
         print(e)
+        sys.exit(1)
 
 
     # Check command line arguments
     if len(sys.argv) == 5:  # Expected: script name, agent1 weights, agent2 weights, buffer
-        agent1, agent2, replay_buffer = load_agents_and_buffer(conv_layers_a1, conv_layers_a2, fc_layers_a1, fc_layers_a2, sys.argv[2], sys.argv[3], sys.argv[4])
+        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) == 4:  # Only agents, no buffer
-        agent1, agent2, replay_buffer = load_agents_and_buffer(conv_layers_a1, conv_layers_a2, fc_layers_a1, fc_layers_a2, sys.argv[2], sys.argv[3])
+        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, sys.argv[2], sys.argv[3])
     else:
-        agent1, agent2, replay_buffer = load_agents_and_buffer(conv_layers_a1, conv_layers_a2, fc_layers_a1, fc_layers_a2)  
+        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2)  
     
     assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
 
@@ -379,6 +380,8 @@ def main():
         elif env.winner == 0:
             draw_score += 1
 
+        steps_per_game = (num_steps1 + num_steps2)
+        ave_steps_per_game = 0.95*ave_steps_per_game + 0.05*steps_per_game
         print(f'\t{num_steps1 + num_steps2} moves in \t{episode} of {end_episode} Ave moves: {ave_steps_per_game:.3f}')
 
         if done and (episode % params["console_status_interval"] == 0 or logthis==True):  # Render end of the game for specified episodes
@@ -427,8 +430,6 @@ def main():
                 writer.add_scalar('Comp/A1/A2 rpe', (agent_1_reward/episode)/(agent_2_reward/episode), episode)
 
 
-            steps_per_game = (num_steps1 + num_steps2)
-            ave_steps_per_game = 0.9*ave_steps_per_game + 0.1*steps_per_game
             writer.add_scalar('Comp/StepsPerGame', steps_per_game, episode)
 
             if False and agent_2_starts > 0:
@@ -491,6 +492,10 @@ def main():
     test_results_string += f'start_episode: {start_episode}\n'
     test_results_string += f'end_episode: {end_episode}\n'
     test_results_string += f'Episode count: {episode}\n'
+    test_results_string += f'A1 Convolutional layers: {cnn_a1}\n'
+    test_results_string += f'A2 Convolutional layers: {cnn_a2}\n'
+    test_results_string += f'A1 Fully connected layers: {fc_a1}\n'
+    test_results_string += f'A2 Fully connected layers: {fc_a2}\n'
     test_results_string += f'agent1 end epsilon: {epsilon1}\n'
     test_results_string += f'agent2 end epsilon: {epsilon2}\n'
     test_results_string += f'Draws: {draw_score}\n'
@@ -503,6 +508,7 @@ def main():
     test_results_string += f'gamma: {gamma}\n'
     test_results_string += f'batch_size: {batch_size}\n'
     test_results_string += f'buffer_capacity: {buffer_capacity}\n'
+
 
 
     print(test_results_string)
