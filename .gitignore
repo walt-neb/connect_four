@@ -12,6 +12,7 @@ runs/
 # But do not ignore .gitignore and other root files
 !.gitignore
 !/*
+!hyps/*
 
 
 
