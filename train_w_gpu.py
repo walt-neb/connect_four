@@ -106,16 +106,10 @@ def load_agents_and_buffer(a1_layer_dims, a2_layer_dims, agent1_wts=None, agent2
     agent1 = DQNAgent(input_dim, output_dim, a1_layer_dims)
     agent2 = DQNAgent(input_dim, output_dim, a2_layer_dims)
 
-
     replay_buffer = deque(maxlen=10000)  # Adjust size as needed
 
     # Load weights if paths are provided
-    if agent1_wts and os.path.exists(agent1_wts):
-        '''
-        checkpoint = torch.load(agent1_wts)
-        for key, tensor in checkpoint.items():
-            print(f"{agent1_wts}: {key}: {tensor.size()}")  
-        '''          
+    if agent1_wts and os.path.exists(agent1_wts):    
         agent1.load_state_dict(torch.load(agent1_wts))
         agent1.eval()
         print(f"Loaded weights for Agent 1 from {agent1_wts}.")
@@ -123,11 +117,6 @@ def load_agents_and_buffer(a1_layer_dims, a2_layer_dims, agent1_wts=None, agent2
         print(f"Starting Agent 1 from scratch or file not found: {agent1_wts}")
 
     if agent2_wts and os.path.exists(agent2_wts):
-        '''
-        checkpoint = torch.load(agent2_wts)
-        for key, tensor in checkpoint.items():
-            print(f"{agent2_wts}: {key}: {tensor.size()}")  
-        '''
         agent2.load_state_dict(torch.load(agent2_wts))
         agent2.eval()
         print(f"Loaded weights for Agent 2 from {agent2_wts}.")
@@ -227,9 +216,6 @@ def main():
     print(f'agent_1_layer_dims_string: {agent_1_layer_dims_string}')
     print(f'agent_2_layer_dims_string: {agent_2_layer_dims_string}')
     print(f'render_games: {render_games}')
-
-    
-
 
 
     # Check command line arguments
