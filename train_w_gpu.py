@@ -261,7 +261,7 @@ def main():
 
     # Optimizers
     optimizer1 = optim.Adam(agent1.parameters(), lr=params["agent1_learning_rate"])
-    optimizer2 = optim.Adam(agent2.parameters(), lr=params["agent1_learning_rate"])
+    optimizer2 = optim.Adam(agent2.parameters(), lr=params["agent2_learning_rate"])
 
 
     # Environment
@@ -368,7 +368,7 @@ def main():
         if done and (episode % params["console_status_interval"] == 0 or logthis==True):  # Render end of the game for specified episodes
             print(f'----Episode {episode} of {end_episode}--------')
             winner = env.render()
-            print(f"Episode {episode}, Step {num_steps1 + num_steps2}")
+            print(f"Episode {episode} Step {num_steps1 + num_steps2}")
             print(f"Agent {active_agent} ({env.get_player_symbol(active_agent)}) action: {action}")
             if winner is not None:
                 print(f"Agent {winner} wins")  
@@ -482,6 +482,11 @@ def main():
     test_results_string += f'Ave steps per game: {ave_steps_per_game:.2f}\n'
     test_results_string += f'total_loss1 / num_steps1: {total_loss1 / num_steps1}\n'
     test_results_string += f'total_loss2 / num_steps2: {total_loss2 / num_steps2}\n'
+    test_results_string += f'agent1 lr: {params["agent1_learning_rate"]}\n'
+    test_results_string += f'agent2 lr: {params["agent2_learning_rate"]}\n'
+    test_results_string += f'gamma: {gamma}\n'
+    test_results_string += f'batch_size: {batch_size}\n'
+    test_results_string += f'buffer_capacity: {buffer_capacity}\n'
 
 
     print(test_results_string)
