@@ -454,8 +454,11 @@ def main():
                 #save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
                 #save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
 
-            if check_e_keypress():
-                print('Keyboard Keypress -e- detected, exiting training loop')
+            if check_e_keypress() or draw_score > 10:
+                if draw_score > 10:
+                    print('Draws > 10, exiting training loop')  
+                else:
+                    print('Keyboard Keypress -e- detected, exiting training loop')
                 break
 
     writer.close()

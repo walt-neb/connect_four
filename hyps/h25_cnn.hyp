@@ -1,0 +1,52 @@
+
+
+
+#filename: h23_cnn.hyp
+
+# used for RL training of DDQN for connect-four game play with CNN layers
+
+start_episode = 0
+end_episode = 100002
+max_replay_buffer_size = 1000000
+
+agent1_learning_rate = 0.00025
+agent2_learning_rate = 0.00025
+
+# Convolutional layer configurations: (out_channels, kernel_size, stride)
+cnn_a1 = [(16, 3, 1, 1), (32, 3, 1, 1), (64, 3, 1, 1)]
+cnn_a2 = [(16, 3, 1, 1), (32, 3, 1, 1), (64, 3, 1, 1)]
+
+# Fully connected layer dimensions for each agent
+fc_a1 = [2688, 32, 16]
+fc_a2 = [256, 128, 64]
+
+console_status_interval = 500
+tensorboard_status_interval = 100
+ckpt_interval = 2500
+
+render_game_at = [1, 250001]
+
+a1_epsilon_start = 0.9
+a1_epsilon_end = 0.01
+a2_epsilon_start = 0.9
+a2_epsilon_end = 0.01
+
+batch_size = 32
+gamma = 0.99
+
+
+----------------------- Notes: 
+
+CNN Layer: (16, 3, 1, 1)
+    16: This is the number of filters (or kernels) in the first convolutional layer. Each filter extracts different 
+    features from the input image, such as edges, colors, or other textures.
+    3: This represents the kernel size. The kernel is a 3x3 grid, which is the size of the filter that will be convolved 
+    with the input.
+    1: This is the stride of the convolution. The stride specifies how many pixels the filter should move after each 
+    operation. A stride of 1 means the filter moves one pixel at a time.
+    1: This is the padding. Padding of 1 means that one layer of zeros is added around the entire input feature map. 
+    This is typically done to preserve the spatial dimensions of the input through the layer, so the output feature map 
+    will have the same width and height as the input map if the stride is 1.
+
+
+

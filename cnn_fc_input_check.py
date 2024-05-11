@@ -8,21 +8,15 @@ from typing import List, Tuple, Optional
 
 
 def explore_network_configurations(input_height: int, input_width: int,
-                                   conv_layers: List[Tuple[int, int, int, int]],
+                                   conv_layers: List[Tuple[int, int, int, Optional[int]]],
                                    fc_layers: List[int]) -> Tuple[bool, List[int]]:
-    """
-    Explore and validate network configurations for CNN and FC layers.
-
-    :param input_height: The height of the input layer.
-    :param input_width: The width of the input layer.
-    :param conv_layers: A list of tuples for each conv layer (num_filters, kernel_size, stride, padding).
-    :param fc_layers: A list of neuron counts for each fully connected layer.
-    :return: A tuple indicating if the configuration is valid and the corrected first FC layer size if needed.
-    """
     current_height = input_height
     current_width = input_width
 
-    for num_filters, kernel_size, stride, padding in conv_layers:
+    for params in conv_layers:
+        num_filters, kernel_size, stride = params[:3]
+        padding = params[3] if len(params) > 3 else 0  # Assume padding is 0 if not specified
+
         current_height = ((current_height + 2 * padding - kernel_size) // stride) + 1
         current_width = ((current_width + 2 * padding - kernel_size) // stride) + 1
 
@@ -30,16 +24,12 @@ def explore_network_configurations(input_height: int, input_width: int,
             print("Invalid configuration: Non-positive output dimension found.")
             return False, []
 
-    # Calculate the total number of outputs from the final convolutional layer
     output_features = num_filters * current_height * current_width
-    print(f"Output features from last convolutional layer: {output_features}")
-
-    # Check if the first FC layer size matches the output features of the last conv layer
     if fc_layers and fc_layers[0] != output_features:
-        print(f"*** Mismatch found: Adjust the FC layer size from {fc_layers[0]} to {output_features}")
+        print(f"\nMismatch found: Adjust the first FC layer size from {fc_layers[0]} to {output_features}")
         fc_layers[0] = output_features
-    else:
-        print("FC layer size matches the output features of the last convolutional layer.")
+    else: 
+        print(f"\nFC layer sizes are compatible with the output features of the CNN layers.")
 
     return True, fc_layers
 

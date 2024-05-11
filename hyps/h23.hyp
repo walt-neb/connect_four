@@ -111,3 +111,25 @@ gamma: 0.98
 batch_size: 256
 buffer_capacity: 200000
 
+
+
+----------- Training Results ----------------
+Started training at: 	2024-05-11  07:09:12
+Ended training at: 	2024-05-11  14:23:54
+Total training time:  7:14:41.358071
+start_episode: 287400
+end_episode: 1000002
+Episode count: 444600
+agent1 end epsilon: 0.06963046803812495
+agent2 end epsilon: 0.06963046803812495
+Draws: 0
+Comp/Ratio Agent_1_to_Agent_2 Reward 1.4458349322584008
+Ave steps per game: 27.73
+total_loss1 / num_steps1: 0.01213856831830191
+total_loss2 / num_steps2: 0.01017654952334447
+agent1 lr: 0.00025
+agent2 lr: 0.00025
+gamma: 0.99
+batch_size: 32
+buffer_capacity: 1000000
+

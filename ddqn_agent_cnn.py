@@ -19,19 +19,29 @@ class CNNDDQNAgent(nn.Module):
     def __init__(self, input_channels, input_height, input_width, output_dim, conv_layers, fc_layers):
         super(CNNDDQNAgent, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+
         # Create convolutional layers dynamically
         current_channels = input_channels
         current_height = input_height
         current_width = input_width
         modules = []
 
-        for (out_channels, kernel_size, stride, padding) in conv_layers:
+        for layer_params in conv_layers:
+            out_channels = layer_params[0]
+            kernel_size = layer_params[1]
+            stride = layer_params[2]
+            # Check if padding is provided, otherwise assume padding is 0
+            padding = layer_params[3] if len(layer_params) > 3 else 0
+
             modules.append(nn.Conv2d(current_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding))
             modules.append(nn.ReLU())  # Typically, a non-linear activation is added after each conv layer
             current_channels = out_channels
+            # Update current height and width
             current_height = (current_height + 2 * padding - kernel_size) // stride + 1
             current_width = (current_width + 2 * padding - kernel_size) // stride + 1
+            # Check for dimension validity
+            if current_height <= 0 or current_width <= 0:
+                raise ValueError("Convolutional settings result in a non-positive dimension size.")
 
         self.conv = nn.Sequential(*modules)
 
