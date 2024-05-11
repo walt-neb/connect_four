@@ -19,44 +19,34 @@ class CNNDDQNAgent(nn.Module):
     def __init__(self, input_channels, input_height, input_width, output_dim, conv_layers, fc_layers):
         super(CNNDDQNAgent, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"DQN Agent Using device: {self.device}")
+        
+        # Example convolutional layers setup
+        self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=3, stride=1, padding=1)  # Output: (16, 6, 7)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)  # Output: (32, 6, 7)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)  # Output: (64, 6, 7)
 
-        # Create the CNN layers
-        cnn_layers = []
-        current_channels = input_channels
-
-        for out_channels, kernel_size, stride in conv_layers:
-            cnn_layers.append(nn.Conv2d(current_channels, out_channels, kernel_size, stride))
-            cnn_layers.append(nn.LeakyReLU())
-            current_channels = out_channels
-
-        # Calculate the output size of the last CNN layer to connect it to the FC layers
-        def size_out(size, kernel_size, stride):
-            return (size - (kernel_size - 1) - 1) // stride + 1
-
-        out_height = input_height
-        out_width = input_width
-        for _, kernel_size, stride in conv_layers:
-            out_height = size_out(out_height, kernel_size, stride)
-            out_width = size_out(out_width, kernel_size, stride)
-
-        cnn_output_dim = current_channels * out_height * out_width
-
-        # Create the FC layers
-        fc_layers.insert(0, cnn_output_dim)  # prepend the size of the output from the last CNN layer
+        # Calculate the total number of features after flattening
+        self.num_flattened_features = 64 * 6 * 7  # Change dimensions according to actual output of conv layers
+        
+        # Fully connected layers
+        fc_layers.insert(0, self.num_flattened_features)
         layers = []
         for i in range(1, len(fc_layers)):
-            layers.append(nn.Linear(fc_layers[i - 1], fc_layers[i]))
-            layers.append(nn.LeakyReLU())
-
+            layers.append(nn.Linear(fc_layers[i-1], fc_layers[i]))
+            layers.append(nn.ReLU())
+        self.fc = nn.Sequential(*layers)
+        
         # Output layer
-        layers.append(nn.Linear(fc_layers[-1], output_dim))
-
-        # Combine CNN and FC layers
-        self.network = nn.Sequential(*(cnn_layers + layers))
+        self.out = nn.Linear(fc_layers[-1], output_dim)
 
     def forward(self, x):
-        return self.network(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = x.view(-1, self.num_flattened_features)  # Flatten the tensor
+        x = self.fc(x)
+        x = self.out(x)
+        return x
 
     def get_epsilon(self, epsilon_step_count, num_episodes, initial_epsilon, minimum_epsilon):
         decay_rate = -math.log(minimum_epsilon / initial_epsilon) / num_episodes

@@ -8,6 +8,7 @@ import cProfile
 import datetime
 import pstats
 import time
+import random
 
 import os
 import sys
@@ -18,6 +19,11 @@ from ddqn_agent_cnn import CNNDDQNAgent
 from two_player_env import TwoPlayerConnectFourEnv
 from replay_buffer import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
+
+import torch.nn.functional as F
+from collections import namedtuple
+
+
 
 import math
 
@@ -66,6 +72,7 @@ def print_parameters(params):
 
 
 def save_checkpoint(model, optimizer, replay_buffer, episode, checkpoint_path):
+    print(f"Type before action: {type(replay_buffer)}")
     # Save model state
     model_state = {
         'state_dict': model.state_dict(),
@@ -93,6 +100,7 @@ def load_checkpoint(checkpoint_path, model, optimizer, device):
     with open(checkpoint_path + '_buffer.pkl', 'rb') as f:
         buffer_state = pickle.load(f)
     replay_buffer = buffer_state['replay_buffer']
+    assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
     assert episode == buffer_state['episode'], "Episode mismatch between model and buffer state."
 
     return model, optimizer, replay_buffer, episode
@@ -133,6 +141,8 @@ def load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, agent1_wts=None, agent2
     if rp_buffer_file and os.path.exists(rp_buffer_file):
         with open(rp_buffer_file, 'rb') as f:
             replay_buffer = pickle.load(f)
+            assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
+
         print(f"Loaded replay buffer from {rp_buffer_file}.")
     else:
         print(f"Starting new replay buffer or file not found: {rp_buffer_file}")
@@ -148,22 +158,36 @@ def soft_update(target_model, source_model, tau=0.005):
     for target_param, param in zip(target_model.parameters(), source_model.parameters()):
         target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)        
 
+# Define the Transition namedtuple
+Transition = namedtuple('Transition', ['state', 'action', 'reward', 'next_state', 'done'])
 
 def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    
     if len(replay_buffer) < batch_size:
         return torch.tensor(0.0, device=device)  # Not enough samples to train so return 0 loss
 
-    # Sample a batch from the replay buffer
-    transitions = replay_buffer.sample(batch_size)
-    batch = list(zip(*transitions))
+    # Ensure the replay buffer is a list or convert it temporarily for sampling
+    if isinstance(replay_buffer, (set, dict)):
+        replay_buffer = list(replay_buffer)  # Convert to list if not already
 
-    states = torch.tensor(np.array(batch[0]), dtype=torch.float32).to(device)
-    actions = torch.tensor(batch[1], dtype=torch.long).to(device)
-    rewards = torch.tensor(batch[2], dtype=torch.float32).to(device)
-    next_states = torch.tensor(np.array(batch[3]), dtype=torch.float32).to(device)
-    dones = torch.tensor(batch[4], dtype=torch.bool).to(device)
+    # Sample a batch from the replay buffer
+    transitions = replay_buffer.sample(batch_size)    
+    #print("Transitions sample:", transitions)
+    if transitions and isinstance(transitions[0], tuple):
+        batch = [Transition(*t) for t in transitions]  # Convert list of tuples to list of Transition namedtuples
+    else:
+        batch = transitions  # Already Transition namedtuples
+    #print("Batch sample:", batch[0].state, batch[0].action, batch[0].reward, batch[0].next_state, batch[0].done)
+
+    # Unpack the transitions
+    states, actions, rewards, next_states, dones = zip(*transitions)
+    
+    states = torch.tensor([t.state for t in batch], dtype=torch.float32).view(batch_size, 1, 6, 7).to(device)
+    next_states = torch.tensor([t.next_state for t in batch], dtype=torch.float32).view(batch_size, 1, 6, 7).to(device)
+    actions = torch.tensor([t.action for t in batch], dtype=torch.int64).to(device)
+    rewards = torch.tensor([t.reward for t in batch], dtype=torch.float32).to(device)
+    dones = torch.tensor([t.done for t in batch], dtype=torch.bool).to(device)
+
 
     # Current Q values using the main network
     curr_q_values = agent(states).gather(1, actions.unsqueeze(1)).squeeze(1)
@@ -228,6 +252,7 @@ def main():
     else:
         agent1, agent2, replay_buffer = load_agents_and_buffer(conv_layers_a1, conv_layers_a2, fc_layers_a1, fc_layers_a2)  
     
+    assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
 
     # Move agents to GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -264,7 +289,6 @@ def main():
     replay_buffer2 = ReplayBuffer(buffer_capacity)
 
     episode_framecount = 0
-
     agent_1_score = 0
     agent_2_score = 0
     draw_score = 0
@@ -312,6 +336,8 @@ def main():
                 action = agent1.select_action(state, valid_actions, epsilon1)
                 next_state, reward, done, next_player = env.step(action)
                 replay_buffer1.push(state, action, reward, next_state, done)
+                #assert isinstance(replay_buffer1, deque), "Replay buffer is not a deque!"
+
                 loss1 = train(agent1, agent1_tgt, optimizer1, replay_buffer1, batch_size, gamma)
                 # Update target network using soft updates
                 if episode % update_frequency == 0:
@@ -324,6 +350,8 @@ def main():
                 action = agent2.select_action(state, valid_actions, epsilon2)
                 next_state, reward, done, next_player = env.step(action)
                 replay_buffer2.push(state, action, reward, next_state, done)
+                #assert isinstance(replay_buffer2, deque), "Replay buffer is not a deque!"
+
                 loss2 = train(agent2, agent2_tgt, optimizer2, replay_buffer2, batch_size, gamma)
                 if loss2 is not None:
                     total_loss2 += loss2.item()
@@ -367,8 +395,6 @@ def main():
             if num_steps1 > 0 and num_steps2 > 0:
                 print(f'Agent 1 loss: {total_loss1 / num_steps1}')
                 print(f'Agent 2 loss: {total_loss2 / num_steps2}')
-            #print(f'Agent 1 replay buffer size: {len(replay_buffer1)}')
-            #print(f'Agent 2 replay buffer size: {len(replay_buffer2)}')
             if agent_2_starts > 0:
                 print(f'A1 over A2 as Player1: {agent_1_starts/agent_2_starts:.3f}')
             print(f'A1 reward - A2 reward: {agent_1_reward - agent_2_reward:.3f}')
@@ -442,6 +468,8 @@ def main():
     torch.save(agent2.state_dict(), agent2_filename)
     with open(replay_buffer_filename, 'wb') as f:
         pickle.dump(replay_buffer, f)
+        assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
+
 
  
     # Print the sizes of the saved models
