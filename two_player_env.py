@@ -18,6 +18,8 @@ class TwoPlayerConnectFourEnv():
         self.winner = None
         self.total_steps = 0 
         self.writer = writer  # Store the SummaryWriter instance
+        self.reward_shaping = True
+        self.debug_mode = False
 
     def get_player_symbol(self, current_player):
         """
@@ -35,6 +37,12 @@ class TwoPlayerConnectFourEnv():
         self.done = False
         self.winner = None
         return self.board.flatten(), self.current_player
+    
+    def enable_reward_shaping(self, enable=True):
+        self.reward_shaping = enable
+
+    def enable_debug_mode(self, enable=False):
+        self.debug_mode = enable
 
     def step(self, action):
         if self.done:
@@ -45,27 +53,21 @@ class TwoPlayerConnectFourEnv():
         row = max(np.where(self.board[:, action] == 0)[0])
         self.board[row, action] = self.current_player
         last_move = (row, action)
-        
+
         # Initial reward calculation
         reward = 0
-        reward_details = {
-            'blocking': self.reward_for_blocking(self.board, self.current_player, last_move),
-            'opportunities': self.reward_for_opportunities(self.board, self.current_player, last_move),
-            'forcing': self.reward_for_forcing(self.board, self.current_player, last_move),
-            'futile_moves': self.reward_for_futile_moves(self.board, action)
-            #'advanced_patterns': self.reward_for_advanced_patterns(self.board, self.current_player, last_move)
-        }
+        r_win = 0
+        r_block = 0
+        r_opp = 0
+        r_futil = 0
+        r_force = 0
+        r_adv = 0
 
-        for key, value in reward_details.items():
-            reward += value
-            # if value != 0:
-            #     print(f'player {self.current_player}: {key}0 {value}')
-            if self.writer is not None:
-                self.writer.add_scalar(f'Env/{key}_player_{self.current_player}', value, self.total_steps)
 
         # Win check
         if self.check_win(player=self.current_player):
-            reward += 2 # Reward for winning is larger
+            r_win = 7 # Reward for winning is larger
+            #print(f'\tplayer {self.current_player}:\twinning\t\t{reward:.2f}')
             self.done = True
             self.winner = self.current_player
             if self.writer is not None:
@@ -75,6 +77,26 @@ class TwoPlayerConnectFourEnv():
             self.winner = None
             if self.writer is not None:
                 self.writer.add_scalar('Env/Draw', 1, self.total_steps)
+        
+        # Reward shapping : fix this or delete it... 
+        if self.reward_shaping:
+            r_block = self.reward_for_blocking(self.board, self.current_player, last_move)
+            r_opp   = self.reward_for_opportunities(self.board, self.current_player, last_move)
+            r_futil = self.reward_for_futile_moves(self.board, action)            
+            #r_force = self.reward_for_forcing(self.board, self.current_player, last_move)
+            #r_adv   = self.reward_for_advanced_patterns(self.board, self.current_player, last_move)
+        
+        reward = r_win + r_block + r_opp + r_futil + r_force
+
+        if self.debug_mode: #Print the details of the reward
+            print(f'\n---- player {self.current_player}:\taction {action}---')
+            self.render()
+            print(f'reward for blocking: {r_block:.2f}')
+            print(f'reward for opportunities: {r_opp:.2f}')
+            print(f'reward for futile moves: {r_futil:.2f}')
+            #print(f'reward for forcing: {r_force:.2f}')
+            #print(f'reward for advanced patterns: {r_adv:.2f}')
+            print(f'Total reward: {reward:.2f}')
         
         self.current_player = 3 - self.current_player
         self.total_steps += 1
@@ -232,7 +254,7 @@ class TwoPlayerConnectFourEnv():
             if potential_threats == 1:
                 forced_moves += 1
 
-        return 0.4 * forced_moves if forced_moves > 0 else 0
+        return 0.2 * forced_moves if forced_moves > 0 else 0
 
     def reward_for_futile_moves(self, board, action):
         # Check if the column is nearly full (i.e., only the top cell is empty).

@@ -4,6 +4,49 @@ import time
 from typing import List, Tuple, Optional
 
 
+import torch.nn as nn
+
+def calculate_total_parameters(cnn_layers, fc_layers, input_channels=1):
+    total_params = 0
+    current_channels = input_channels
+
+    # Calculate parameters for CNN layers
+    for (out_channels, kernel_size, stride, padding) in cnn_layers:
+        # Number of parameters in a conv layer = (input_channels * kernel_size * kernel_size + 1) * out_channels
+        conv_params = (current_channels * kernel_size * kernel_size + 1) * out_channels
+        total_params += conv_params
+        current_channels = out_channels  # Update the channel count for the next layer
+
+    # The output of the last CNN layer needs to be calculated to know the input to the first FC layer
+    # Assuming the input size is known, let's calculate the feature map size after the last CNN layer:
+    # Example initial feature map size (common for small images or patches)
+    feature_map_size = 32  # Adjust based on your actual input feature map dimensions
+    for (out_channels, kernel_size, stride, padding) in cnn_layers:
+        feature_map_size = ((feature_map_size + 2 * padding - kernel_size) // stride) + 1
+
+    # Total number of outputs from the final convolutional layer
+    num_flattened_features = current_channels * feature_map_size * feature_map_size
+
+    # Assuming the first element of fc_layers is correctly set to match the flattened CNN output
+    # If not, you can uncomment the next line to adjust it dynamically
+    # fc_layers[0] = num_flattened_features
+
+    # Calculate parameters for FC layers
+    current_input_features = fc_layers[0]
+    for output_features in fc_layers[1:]:
+        # Number of parameters in an FC layer = (input_features + 1) * output_features (including bias)
+        fc_params = (current_input_features + 1) * output_features
+        total_params += fc_params
+        current_input_features = output_features  # Update for the next layer
+
+    # Output layer parameters
+    if fc_layers:
+        output_layer_params = (current_input_features + 1) * fc_layers[-1]
+        total_params += output_layer_params
+
+    return total_params
+
+
 
 
 
@@ -111,13 +154,17 @@ def main():
         print("Valid configuration with FC layers:", adjusted_fc_layers)
     else:
         print("Invalid configuration. Please adjust the parameters.")
+    total_parameters = calculate_total_parameters(cnn_a1, fc_a1)
+    print("Total parameters in the network 1:", total_parameters)        
 
     print("Checking network configurations for model2...")
     valid, adjusted_fc_layers = explore_network_configurations(input_height, input_width, cnn_a2, fc_a2)
     if valid:
         print("Valid configuration with FC layers:", adjusted_fc_layers)
     else:
-        print("Invalid configuration. Please adjust the parameters.")        
+        print("Invalid configuration. Please adjust the parameters.")    
+    total_parameters = calculate_total_parameters(cnn_a1, fc_a1)
+    print("Total parameters in the network 2:", total_parameters)            
 
 
 

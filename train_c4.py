@@ -1,14 +1,11 @@
 
 
 
-#filename:  train.py
+#filename:  train_c4.py
 
 import curses
-import cProfile
 import datetime
-import pstats
 import time
-import random
 
 import os
 import sys
@@ -24,8 +21,6 @@ import torch.nn.functional as F
 from collections import namedtuple
 
 
-
-import math
 
 import torch
 import torch.nn as nn
@@ -65,10 +60,11 @@ def print_parameters(params):
     if not params:
         print("The parameters dictionary is empty.")
         return
-
+    param_str = ""
     print("*** Training Parameters: ")
     for key, value in params.items():
-        print(f"\t\t{key} = {value}")
+        param_str += (f"\t\t{key} :\t{value}\n")
+    return param_str
 
 
 def save_checkpoint(model, optimizer, replay_buffer, episode, checkpoint_path):
@@ -214,7 +210,9 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
 
 
 dbmode=1
-
+def str_to_bool(s):
+    result = s.lower() == 'true'
+    return result
 
 def main():
 
@@ -231,7 +229,7 @@ def main():
     print(f'hyp_file_root: {hyp_file_root}')
 
     params = load_hyperparams(hyp_file)
-    print_parameters(params)
+    print(print_parameters(params))
     writer = SummaryWriter(f'runs/{hyp_file_root}_connect_four_experiment')
 
     try:
@@ -302,6 +300,8 @@ def main():
     ave_steps_per_game = 10
 
     start_episode = params["start_episode"]
+    env.enable_reward_shaping(str_to_bool(params["enable_reward_shaping"]))
+    env.enable_debug_mode(str_to_bool(params["env_debug_mode"]))
 
     #agent1, optimizer1, replay_buffer, start_episode = load_checkpoint('path_to_checkpoint', agent1, optimizer1, device)
 
@@ -359,10 +359,10 @@ def main():
                     num_steps2 += 1
 
             if episode in render_games: 
-                logthis = True
+                #logthis = True
                 print(f"----Episode {episode} Step {num_steps1 + num_steps2}")                
                 winner = env.render() 
-                print(f"Agent {active_agent} playing ({env.get_player_symbol(active_agent)}) takes action {action} receives reward of {reward}")   
+                #print(f"Agent {active_agent} playing ({env.get_player_symbol(active_agent)}) takes action {action} receives reward of {reward:.2f}")   
                 #input("Press key to continue...")
 
             if not done:
@@ -377,12 +377,15 @@ def main():
         elif env.winner == 2:
             agent_2_score += 1
             agent_2_reward += reward
-        elif env.winner == 0:
+        elif env.winner == None:
             draw_score += 1
 
         steps_per_game = (num_steps1 + num_steps2)
-        ave_steps_per_game = 0.95*ave_steps_per_game + 0.05*steps_per_game
-        print(f'\t{num_steps1 + num_steps2} moves in \t{episode} of {end_episode} Ave moves: {ave_steps_per_game:.3f}')
+        if ave_steps_per_game == 0:
+            ave_steps_per_game = steps_per_game
+        else:
+            ave_steps_per_game = 0.97*ave_steps_per_game + 0.03*steps_per_game
+        print(f'\t{steps_per_game:02d} moves in {episode} of {end_episode}. Ave moves: {ave_steps_per_game:.3f} - Press (e) for early exit')
 
         if done and (episode % params["console_status_interval"] == 0 or logthis==True):  # Render end of the game for specified episodes
             print(f'----Episode {episode} of {end_episode}--------')
@@ -398,17 +401,11 @@ def main():
             if num_steps1 > 0 and num_steps2 > 0:
                 print(f'Agent 1 loss: {total_loss1 / num_steps1}')
                 print(f'Agent 2 loss: {total_loss2 / num_steps2}')
-            if agent_2_starts > 0:
-                print(f'A1 over A2 as Player1: {agent_1_starts/agent_2_starts:.3f}')
-            print(f'A1 reward - A2 reward: {agent_1_reward - agent_2_reward:.3f}')
             if agent_2_reward > 0:
-                print(f'A1 reward // A2 reward: {agent_1_reward / agent_2_reward:.3f}')
-
+                print(f'A1 reward / A2 reward: {agent_1_reward / agent_2_reward:.3f}')
             if episode > 0:
                 print(f'Win Rates -> Agent 1: {agent_1_score/episode:.4f}')
                 print(f'             Agent 2: {agent_2_score/episode:.4f}')
-
-
 
         if done and (episode % params["tensorboard_status_interval"] == 0 or logthis==True): 
             # Correct the scalar tags to be consistent and not include dynamic values
@@ -454,7 +451,7 @@ def main():
                 #save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
                 #save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
 
-            if check_e_keypress() or draw_score > 10:
+            if check_e_keypress():# or draw_score > 10:
                 if draw_score > 10:
                     print('Draws > 10, exiting training loop')  
                 else:
@@ -495,31 +492,26 @@ def main():
     test_results_string += f'start_episode: {start_episode}\n'
     test_results_string += f'end_episode: {end_episode}\n'
     test_results_string += f'Episode count: {episode}\n'
-    test_results_string += f'A1 Convolutional layers: {cnn_a1}\n'
-    test_results_string += f'A2 Convolutional layers: {cnn_a2}\n'
-    test_results_string += f'A1 Fully connected layers: {fc_a1}\n'
-    test_results_string += f'A2 Fully connected layers: {fc_a2}\n'
     test_results_string += f'agent1 end epsilon: {epsilon1}\n'
     test_results_string += f'agent2 end epsilon: {epsilon2}\n'
     test_results_string += f'Draws: {draw_score}\n'
-    test_results_string += f'Comp/Ratio Agent_1_to_Agent_2 Reward {agent_1_reward / agent_2_reward}\n'
+    if agent_2_starts > 0:
+        test_results_string += f'agent_1_starts / agent_2_starts {agent_1_starts / agent_2_starts}\n'
+    test_results_string += f'agent_1_reward / agent_2_reward {agent_1_reward / agent_2_reward}\n'
     test_results_string += f'Ave steps per game: {ave_steps_per_game:.2f}\n'
     test_results_string += f'total_loss1 / num_steps1: {total_loss1 / num_steps1}\n'
     test_results_string += f'total_loss2 / num_steps2: {total_loss2 / num_steps2}\n'
-    test_results_string += f'agent1 lr: {params["agent1_learning_rate"]}\n'
-    test_results_string += f'agent2 lr: {params["agent2_learning_rate"]}\n'
-    test_results_string += f'gamma: {gamma}\n'
-    test_results_string += f'batch_size: {batch_size}\n'
-    test_results_string += f'buffer_capacity: {buffer_capacity}\n'
-
-
+    test_results_string += f'Input Parameters:\n'
+    test_results_string += print_parameters(params)
+    test_results_string += f'models saved for both agents:\n{agent1_filename}\n{agent2_filename}\n'
+    test_results_string += f'replay buffer saved to\n{replay_buffer_filename}\n'
+    if episode != end_episode:
+        test_results_string += f'\n**Exited training loop early at episode {episode}'
+        test_results_string += f'\nstart_episode = {episode}\n'
 
     print(test_results_string)
     save_test_results_with_hyps(hyp_file,test_results_string)
 
-
-    print(f'models saved for both agents, {agent1_filename}, and {agent2_filename}')
-    print(f'replay buffer saved to {replay_buffer_filename}')
        
 def save_test_results_with_hyps(hyp_file, test_results_string):
     try:
