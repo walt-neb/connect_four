@@ -499,8 +499,9 @@ def main():
         test_results_string += f'agent_1_starts / agent_2_starts {agent_1_starts / agent_2_starts}\n'
     test_results_string += f'agent_1_reward / agent_2_reward {agent_1_reward / agent_2_reward}\n'
     test_results_string += f'Ave steps per game: {ave_steps_per_game:.2f}\n'
-    test_results_string += f'total_loss1 / num_steps1: {total_loss1 / num_steps1}\n'
-    test_results_string += f'total_loss2 / num_steps2: {total_loss2 / num_steps2}\n'
+    if num_steps1 > 0 and num_steps2 > 0:
+        test_results_string += f'total_loss1 / num_steps1: {total_loss1 / num_steps1}\n'
+        test_results_string += f'total_loss2 / num_steps2: {total_loss2 / num_steps2}\n'
     test_results_string += f'Input Parameters:\n'
     test_results_string += print_parameters(params)
     test_results_string += f'models saved for both agents:\n{agent1_filename}\n{agent2_filename}\n'
