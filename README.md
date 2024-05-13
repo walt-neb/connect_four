@@ -33,7 +33,7 @@ python play_human.py model_to_play.wts
 
 ## Installation
 Clone the repository and install the required packages:
-git clone <repository-url>
+git clone https://github.com/walt-neb/connect_four
 cd connect_four
 pip install -r requirements.txt
 
