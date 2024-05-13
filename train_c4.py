@@ -297,6 +297,7 @@ def main():
     agent_2_reward = 0
     update_frequency = 1000
     gamma = params["gamma"]
+    steps_per_game = 0
     ave_steps_per_game = 10
 
     start_episode = params["start_episode"]
@@ -358,7 +359,7 @@ def main():
                     total_loss2 += loss2.item()
                     num_steps2 += 1
 
-            if episode in render_games: 
+            if episode in render_games or steps_per_game > 40: 
                 #logthis = True
                 print(f"----Episode {episode} Step {num_steps1 + num_steps2}")                
                 winner = env.render() 
