@@ -3,28 +3,11 @@ This project implements a Connect Four game with a deep reinforcement learning a
 
 ## Directory Structure
 connect_four/
-├── check_cnn_fc_match.py # Script to check matches between CNN outputs and fully connected layer
-├── ddqn_agent_cnn.py # DDQN agent using a CNN
 ├── hyps # Directory for hyperparameter files
-│ ├── h3_cnn.hyp # Hyperparameters set for experiment h3
-│ └── h4_cnn.hyp # Hyperparameters set for experiment h4
-├── play_human.py # Script to play against the AI
-├── play_two_models.py # Script for two models to play against each other
-├── replay_buffer.py # Replay buffer implementation for training
 ├── runs # Training runs for different experiments
-│ ├── h3_cnn_connect_four_experiment
-│ └── h4_cnn_connect_four_experiment
-├── test_reward_functions.py # Script to test different reward functions
-├── train_c4.py # Main training script
-├── two_player_env.py # Two-player Connect Four environment
-└── wts # Weights and saved states for trained models
-├── eh_agent1_h19.wts
-├── model1_h3_cnn.wts
-├── model1_h4_cnn.wts
-├── model2_h3_cnn.wts
-├── model2_h4_cnn.wts
-├── replay_buffer_h3_cnn.pkl
-└── replay_buffer_h4_cnn.pkl
+├── wts # Modle weights
+
+
 
 ## Usage
 To train the Connect Four AI, run the following command:
