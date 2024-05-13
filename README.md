@@ -1,49 +1,61 @@
-# README.txt
+# Connect Four AI
+This project implements a Connect Four game with a deep reinforcement learning agent using a double deep Q-network (DDQN). The agent is trained with convolutional neural networks to evaluate the game state and make decisions.
 
-# Connect Four Reinforcement Learning Project
-
-## Overview
-This project focuses on developing and testing reinforcement learning (RL) agents on the Connect Four game, a simple yet well-understood environment. The primary goal is to explore different aspects of reinforcement learning, including agent training, hyperparameter tuning, and the efficacy of various neural network configurations in a controlled setting.
-
-## Project Objectives
-- **Learning and Testing RL Agents**: Utilize the Connect Four game to train and evaluate RL agents, providing a clear demonstration of learning capabilities and strategy development.
-- **Configurability**: Facilitate easy modification of hyperparameters, neural network layers, optimizers, and other RL configurations to study their impacts on agent performance.
-- **Graphical Enhancement**: Future updates aim to integrate this project into a graphical environment such as TensorFlow Playground, allowing for more interactive visualization and experimentation.
-
-## Setup
-To get started with this project, follow these steps:
-
-1. **Clone the Repository**:
-git clone https://github.com/yourusername/connect-four-rl.git
-cd connect-four-rl
-
-2. **Install Requirements**:
-Ensure you have Python installed, and then install the required packages:
-
-
-3. **Run the Simulation**:
-Execute the main script to start training the agents:
-
-python train.py
-
-python play.py [trained_agent]
+## Directory Structure
+connect_four/
+├── check_cnn_fc_match.py # Script to check matches between CNN outputs and fully connected layer
+├── ddqn_agent_cnn.py # DDQN agent using a CNN
+├── hyps # Directory for hyperparameter files
+│ ├── h3_cnn.hyp # Hyperparameters set for experiment h3
+│ └── h4_cnn.hyp # Hyperparameters set for experiment h4
+├── play_human.py # Script to play against the AI
+├── play_two_models.py # Script for two models to play against each other
+├── replay_buffer.py # Replay buffer implementation for training
+├── runs # Training runs for different experiments
+│ ├── h3_cnn_connect_four_experiment
+│ └── h4_cnn_connect_four_experiment
+├── test_reward_functions.py # Script to test different reward functions
+├── train_c4.py # Main training script
+├── two_player_env.py # Two-player Connect Four environment
+└── wts # Weights and saved states for trained models
+├── eh_agent1_h19.wts
+├── model1_h3_cnn.wts
+├── model1_h4_cnn.wts
+├── model2_h3_cnn.wts
+├── model2_h4_cnn.wts
+├── replay_buffer_h3_cnn.pkl
+└── replay_buffer_h4_cnn.pkl
 
 ## Usage
-- **Training the Agent**: The `train.py` script runs the training sessions for the RL agents, automatically adjusting according to the defined hyperparameters.
-- **Adjusting Parameters**: Modify the parameters in `config.py` (to be implemented) to tweak the training process and neural network architecture.
-- **Visualization**: Use the provided visualization tools in `visualization.py` (to be implemented) to observe the agent's performance and decision-making process.
+To train the Connect Four AI, run the following command:
 
-## Future Directions
-- **Hyperparameter Tuning Interface**: Develop a GUI or command-line interface for easier manipulation and testing of different training configurations.
-- **Integration with TensorFlow Playground**: Enhance the project to support a graphical web-based environment for broader accessibility and interactive learning experiences.
+python train_c4.py <hyperparameters_file> [agent1_weights] [agent2_weights] [replay_buffer]
+
+
+Where `<hyperparameters_file>` is the path to a hyperparameter configuration file. Optionally, you can specify paths to the weights for agent1, agent2, and the replay buffer to continue training from a previous state.
+
+### Example
+python train_c4.py ./hyps/h3_cnn.hyp ./wts/model1_h3_cnn.wts ./wts/model2_h3_cnn.wts ./wts/replay_buffer_h3_cnn.pkl
+
+
+## Playing Against the AI
+To play against the trained AI:
+python play_human.py model_to_play.wts
+
+
+## Requirements
+- Python 3.8+
+- PyTorch 1.7+
+- Numpy
+
+## Installation
+Clone the repository and install the required packages:
+git clone <repository-url>
+cd connect_four
+pip install -r requirements.txt
 
 ## Contributing
-Contributions to the project are welcome! You can contribute by:
-- Expanding the neural network configurations.
-- Adding new features or improvements in the simulation environment.
-- Enhancing the documentation or creating tutorials.
-
-For major changes, please open an issue first to discuss what you would like to change.
+Contributions to this project are welcome! Please submit a pull request or open an issue for bugs, features, or other concerns.
 
 ## License
-This project is open-sourced under the MIT license. See the `LICENSE` file for more details.
+This project is open-sourced under the MIT License.

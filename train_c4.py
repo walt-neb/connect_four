@@ -220,7 +220,7 @@ def main():
     print(f'torch.cuda.is_available()={torch.cuda.is_available()}')
 
     if len(sys.argv) < 2:
-        print("Usage: python train.py <hyperparameters_file> <agent1_weights> <agent2_weights> <replay_buffer>")
+        print("Usage: python train_c4.py <hyperparameters_file> [agent1_weights] [agent2_weights] [replay_buffer]")
         return
     
     hyp_file = sys.argv[1]

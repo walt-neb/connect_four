@@ -2,6 +2,7 @@
 
 
 #filename:  train.py
+# early version of the train function, that doesn't include CNN layers, only FC layers
 
 import curses
 import cProfile
