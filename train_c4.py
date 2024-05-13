@@ -359,7 +359,7 @@ def main():
                     total_loss2 += loss2.item()
                     num_steps2 += 1
 
-            if episode in render_games or steps_per_game > 40: 
+            if episode in render_games: # or steps_per_game > 40: 
                 #logthis = True
                 print(f"----Episode {episode} Step {num_steps1 + num_steps2}")                
                 winner = env.render() 
