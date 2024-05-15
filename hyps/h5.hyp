@@ -1,0 +1,102 @@
+
+
+# filename: h5_lstm.hyp
+# training inputs for DDQN connect-four game player using NNs 
+# which are constructed of CNN layers followed by FC layers
+# NOTE: the equal sign is used as a delimeter, and should not exist 
+# anywhere in this file except where hyperparameters are set
+
+start_episode = 0
+end_episode = 100000
+console_status_interval = 500
+tensorboard_status_interval = 100
+ckpt_interval = 2500
+render_game_at = [1, 250001]
+enable_reward_shaping = True
+env_debug_mode = False
+
+
+agent1_learning_rate = 0.00025
+agent2_learning_rate = 0.00025
+a1_epsilon_start = .99
+a1_epsilon_end = 0.501
+a2_epsilon_start = .99
+a2_epsilon_end = 0.501
+batch_size = 32
+gamma = 0.99
+tau = 0.005
+max_replay_buffer_size = 100000
+
+
+# Convolutional layers: (out_channels, kernel_size, stride, padding)
+cnn_a1 = [(4, 4, 1, 1)]
+cnn_a2 = [(4, 4, 1, 1)]
+
+cnn_to_lstm_fc_size = 120
+
+# LSTM layer parameters: (lstm_layers, lstm_hidden_size)
+lstm_a1 = [(1, 120)] 
+lstm_a2 = [(1, 120)]
+
+# Fully connected layer dimensions for each agent
+fc_a1 = [120, 32]  
+fc_a2 = [120, 32]
+
+
+
+add_eog_state = True  
+sequence_length = 7
+
+
+NOTE: Calculate the output size for each convolutional layer using the formula:
+CNN_Output_Size is equal to ((Input_Size−Kernel_Size+2×Padding)/Stride)+1
+Make sure the FC_input_size matches the CNN_output_Size
+
+
+
+
+----------- Training Results ----------------
+Started training at: 	2024-05-15  14:39:39
+Ended training at: 	2024-05-15  15:19:36
+Total training time:  0:39:56.772773
+start_episode: 0
+end_episode: 100000
+Episode count: 44200
+agent1 end epsilon: 0.7326385310935002
+agent2 end epsilon: 0.7326385310935002
+Draws: 86
+agent_1_starts / agent_2_starts 0.9891544034921921
+agent_1_reward / agent_2_reward 1.1733653215937345
+Ave steps per game: 19.39
+total_loss1 / num_steps1: 0.035014811903238297
+total_loss2 / num_steps2: 0.029528765939176083
+Input Parameters:
+		start_episode :	0
+		end_episode :	100000
+		console_status_interval :	500
+		tensorboard_status_interval :	100
+		ckpt_interval :	2500
+		render_game_at :	[1, 250001]
+		enable_reward_shaping :	True
+		env_debug_mode :	False
+		agent1_learning_rate :	0.00025
+		agent2_learning_rate :	0.00025
+		a1_epsilon_start :	0.99
+		a1_epsilon_end :	0.501
+		a2_epsilon_start :	0.99
+		a2_epsilon_end :	0.501
+		batch_size :	32
+		gamma :	0.99
+		tau :	0.005
+		max_replay_buffer_size :	100000
+		cnn_a1 :	[(4, 4, 1, 1)]
+		cnn_a2 :	[(4, 4, 1, 1)]
+		cnn_to_lstm_fc_size :	120
+		lstm_a1 :	[(1, 120)]
+		lstm_a2 :	[(1, 120)]
+		fc_a1 :	[120, 32]
+		fc_a2 :	[120, 32]
+
+**Exited training loop early at episode 44200
+start_episode = 44200
+
