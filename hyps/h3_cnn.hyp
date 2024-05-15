@@ -24,12 +24,13 @@ a2_epsilon_start = .91
 a2_epsilon_end = 0.01
 batch_size = 32
 gamma = 0.99
+tau = 0.005
 max_replay_buffer_size = 1000000
 
 
 # Convolutional layers: (out_channels, kernel_size, stride, padding)
-cnn_a1 = [(8, 3, 1, 1), (16, 3, 1, 1), (32, 3, 1, 1)]
-cnn_a2 = [(8, 3, 1, 1), (16, 3, 1, 1), (32, 3, 1, 1)]
+cnn_a1 = [(16, 4, 1, 1)]
+cnn_a2 = [(16, 4, 1, 1)] 
 
 # Fully connected layer dimensions for each agent
 fc_a1 = [1344, 32, 8]
