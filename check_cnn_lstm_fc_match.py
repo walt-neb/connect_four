@@ -1,6 +1,6 @@
 
 
-#filename: check_cnn_fc_match.py
+#filename: check_cnn_lstm_fc_match.py
 
 import os
 import sys
@@ -51,29 +51,61 @@ def calculate_total_parameters(cnn_layers, fc_layers, input_channels=1):
     return total_params
 
 
-def explore_network_configurations(input_height: int, input_width: int,
-                                   conv_layers: List[Tuple[int, int, int, Optional[int]]],
-                                   fc_layers: List[int]) -> Tuple[bool, List[int]]:
+def explore_network_configurations(
+    input_height: int,
+    input_width: int,
+    conv_layers: List[Tuple[int, int, int, Optional[int]]],
+    lstm_layers: List[Tuple[int, int]],
+    fc_layers: List[int],
+    cnn_to_lstm_fc_size: int,  # New: Size of the FC layer between CNN and LSTM
+) -> Tuple[bool, List[int]]:
+
+    # Calculate output features after CNN
+    current_channels = 1 # Number of input channels (assuming single-channel board state)
     current_height = input_height
     current_width = input_width
 
-    for params in conv_layers:
-        num_filters, kernel_size, stride = params[:3]
-        padding = params[3] if len(params) > 3 else 0  # Assume padding is 0 if not specified
-
+    for (out_channels, kernel_size, stride, padding) in conv_layers:
         current_height = ((current_height + 2 * padding - kernel_size) // stride) + 1
         current_width = ((current_width + 2 * padding - kernel_size) // stride) + 1
+        current_channels = out_channels
+    output_features = current_channels * current_height * current_width
 
-        if current_height <= 0 or current_width <= 0:
-            print("Invalid configuration: Non-positive output dimension found.")
-            return False, []
+    # FC layer validation (CNN to LSTM)
+    if output_features != cnn_to_lstm_fc_size:
+        print(f"\nError: FC layer (CNN to LSTM) output size ({cnn_to_lstm_fc_size}) "
+              f"does not match CNN output size ({output_features}).\n"
+              f"Options:\n"
+              f"   1. Adjust 'cnn_to_lstm_fc_size' in the hyperparameter file to {output_features}.\n"
+              f"   2. Change CNN kernel size, stride, or padding to produce an output of {cnn_to_lstm_fc_size} after flattening.\n"
+              f"   3. Introduce another FC layer to resize from {output_features} to {cnn_to_lstm_fc_size}.") 
+        return False, []
 
-    output_features = num_filters * current_height * current_width
+
+    # LSTM layer validation
+    for i, (num_lstm_layers, lstm_hidden_size) in enumerate(lstm_layers):
+        if i == 0 and cnn_to_lstm_fc_size != lstm_hidden_size:
+            print(f"\nError: LSTM layer {i + 1} input size ({lstm_hidden_size}) "
+                  f"does not match FC layer (CNN to LSTM) output size ({cnn_to_lstm_fc_size}).\n"
+                  f"Options:\n"
+                  f"   1. Adjust the first LSTM layer's hidden size in 'lstm_a{1 or 2}' to {cnn_to_lstm_fc_size}.\n"
+                  f"   2. Change 'cnn_to_lstm_fc_size' to {lstm_hidden_size}.")  # Added this option
+        elif i > 0 and lstm_layers[i - 1][1] != lstm_hidden_size:
+            print(f"\nError: LSTM layer {i + 1} input size ({lstm_hidden_size}) "
+                  f"does not match previous LSTM layer's hidden size ({lstm_layers[i - 1][1]}).\n"
+                  f"Options:\n"
+                  f"   1. Adjust LSTM layer {i + 1}'s hidden size to {lstm_layers[i - 1][1]}.\n"
+                  f"   2. Adjust the previous LSTM layer's hidden size to {lstm_hidden_size}.")
+
+        output_features = lstm_hidden_size  # Update for the next layer
+
+    # FC layer validation (LSTM to output)
     if fc_layers and fc_layers[0] != output_features:
-        print(f"\nMismatch found: Adjust the first FC layer size from {fc_layers[0]} to {output_features}")
-        fc_layers[0] = output_features
-    else: 
-        print(f"\nFC layer sizes are compatible with the output features of the CNN layers.")
+        print(f"\nError: First FC layer input size ({fc_layers[0]}) "
+              f"does not match the last LSTM layer's hidden size ({output_features}).\n"
+              f"Options:\n"
+              f"   1. Adjust the first FC layer's input size to {output_features}.\n"
+              f"   2. Adjust the last LSTM layer's hidden size to {fc_layers[0]}.")
 
     return True, fc_layers
 
@@ -125,6 +157,9 @@ def main():
         print("Usage: python cnn_fc_input_check.py <hyperparameters_file>")
         return
     
+    print("\n\nChecking CNN-LSTM-FC network configurations...\n")
+
+
     hyp_file = sys.argv[1]
     hyp_file_root = hyp_file.rstrip('.hyp')
     hyp_file_root = os.path.basename(hyp_file_root)
@@ -136,9 +171,11 @@ def main():
     try:
         cnn_a1 = ast.literal_eval(params["cnn_a1"])
         cnn_a2 = ast.literal_eval(params["cnn_a2"])
+        lstm_a1 = ast.literal_eval(params["lstm_a1"])
+        lstm_a2 = ast.literal_eval(params["lstm_a2"])
         fc_a1 = ast.literal_eval(params["fc_a1"])
         fc_a2 = ast.literal_eval(params["fc_a2"])
-        render_games = ast.literal_eval(params["render_game_at"])
+        cnn_to_lstm_fc_size = params["cnn_to_lstm_fc_size"]
     except Exception as e:
         print(e)
         sys.exit(1)
@@ -149,29 +186,33 @@ def main():
 
     input_height = 6
     input_width = 7
-    print("Input dimensions: ", input_height, input_width)
-    print("CNN_model1: ", cnn_a1)
-    print("FC_model1: ", fc_a1)
-    print("CNN_model2: ", cnn_a2)
-    print("FC_model2: ", fc_a2)
+    #print using f-string
+    print(f"Input dimensions: {input_height} x {input_width}")
+    print(f"CNN_model1: \t{cnn_a1}")
+    print(f"LSTM_model1:\t{lstm_a1}")
+    print(f"FC_model1:  \t{fc_a1}")
+    print(f"CNN_model2: \t{cnn_a2}")
+    print(f"LSTM_model2:\t{lstm_a2}")
+    print(f"FC_model2:  \t{fc_a2}")
+    print(f"cnn_to_lstm_fc_size: {cnn_to_lstm_fc_size}")
 
- 
 
-    print("Checking network configurations for model1...")
-    valid, adjusted_fc_layers = explore_network_configurations(input_height, input_width, cnn_a1, fc_a1)
+    print("\nChecking network configurations for model1...")
+    valid, adjusted_fc_layers = explore_network_configurations(input_height, input_width, cnn_a1, lstm_a1, fc_a1, cnn_to_lstm_fc_size)    
     if valid:
         print("Valid configuration with FC layers:", adjusted_fc_layers)
     else:
-        print("Invalid configuration. Please adjust the parameters.")
+        print("***Invalid configuration. Please adjust the parameters.")
     total_parameters = calculate_total_parameters(cnn_a1, fc_a1)
     print("Total parameters in the network 1:", total_parameters)        
 
-    print("Checking network configurations for model2...")
-    valid, adjusted_fc_layers = explore_network_configurations(input_height, input_width, cnn_a2, fc_a2)
+    print("\nChecking network configurations for model2...")
+
+    valid, adjusted_fc_layers = explore_network_configurations(input_height, input_width, cnn_a2, lstm_a2, fc_a2, cnn_to_lstm_fc_size)    
     if valid:
         print("Valid configuration with FC layers:", adjusted_fc_layers)
     else:
-        print("Invalid configuration. Please adjust the parameters.")    
+        print("***Invalid configuration. Please adjust the parameters.")    
     total_parameters = calculate_total_parameters(cnn_a1, fc_a1)
     print("Total parameters in the network 2:", total_parameters)            
 

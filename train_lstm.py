@@ -11,8 +11,8 @@ import os
 import sys
 import pickle
 import numpy as np
-#import ddqn_agent_cnn
-from ddqn_agent_cnn import CNNDDQNAgent 
+import ddqn_agent_cnn_lstm
+from ddqn_agent_cnn_lstm import CNNDDQNAgent 
 from two_player_env import TwoPlayerConnectFourEnv
 from replay_buffer import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
@@ -66,55 +66,55 @@ def print_parameters(params):
         param_str += (f"\t\t{key} :\t{value}\n")
     return param_str
 
-
-def save_checkpoint(model, optimizer, replay_buffer, episode, checkpoint_path):
-    print(f"Type before action: {type(replay_buffer)}")
-    # Save model state
-    model_state = {
-        'state_dict': model.state_dict(),
-        'optimizer': optimizer.state_dict(),
-        'episode': episode  # Include the episode number
-    }
-    torch.save(model_state, checkpoint_path + '_model.ckpt')
-
-    # Save replay buffer and episode number using pickle
-    buffer_state = {
-        'replay_buffer': replay_buffer,
-        'episode': episode
-    }
-    with open(checkpoint_path + '_buffer.pkl', 'wb') as f:
-        pickle.dump(buffer_state, f)
-
-def load_checkpoint(checkpoint_path, model, optimizer, device):
-    # Load model state
-    model_checkpoint = torch.load(checkpoint_path + '_model.ckpt', map_location=device)
-    model.load_state_dict(model_checkpoint['state_dict'])
-    optimizer.load_state_dict(model_checkpoint['optimizer'])
-    episode = model_checkpoint['episode']
-
+def load_all_models(a1, a2, o1, o2, rp1, rp2, hyp_root, ckpt_num):
+    # Load models
+    wts_dir = "./wts/"
+    base_name = f"{wts_dir}chkpt_{hyp_root}_{ckpt_num}"
+    a1.load_state_dict(torch.load(f"{base_name}_a1.pth"))
+    a1.load_state_dict(torch.load(f"{base_name}_a2.pth"))
+    o1.load_state_dict(torch.load(f"{base_name}_a1_optimizer.pth"))
+    o2.load_state_dict(torch.load(f"{base_name}_a2_optimizer.pth"))
+    
     # Load replay buffer
-    with open(checkpoint_path + '_buffer.pkl', 'rb') as f:
-        buffer_state = pickle.load(f)
-    replay_buffer = buffer_state['replay_buffer']
-    assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
-    assert episode == buffer_state['episode'], "Episode mismatch between model and buffer state."
+    with open(f"{base_name}_a1_replay_buffer.pkl", "rb") as f:
+        rp1 = pickle.load(f)
+    with open(f"{base_name}_a2_replay_buffer.pkl", "rb") as f:
+        rp2 = pickle.load(f)
 
-    return model, optimizer, replay_buffer, episode
+    print(f"All models and replay buffer loaded from files with base filename: {base_name}")
+    return a1, a2, o1, o2, rp1, rp2
 
-def load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, agent1_wts=None, agent2_wts=None, rp_buffer_file=None):
+
+def save_all_models(agent, optimizer, name, replay_buffer, base_filename):
+    #Saves both agents' models and replay buffer to files.
+    # Save models (a single model for each agent)
+    filename = f"{base_filename}_{name}.pth"
+    print(f"Saving model to: {filename}")  # Print the full file path
+    torch.save(agent.state_dict(), filename)
+    torch.save(optimizer.state_dict(), f"{base_filename}_{name}_optimizer.pth") 
+    # Save replay buffer
+    with open(f"{base_filename}_{name}_replay_buffer.pkl", "wb") as f:
+        pickle.dump(replay_buffer, f)
+    print(f"Agent {name} model and replay buffer saved to files with base filename: {base_filename}")
+
+
+
+def load_agents_and_buffer(cnn_a1, cnn_a2, lstm_a1, lstm_a2, fc_a1, fc_a2, agent1_wts=None, agent2_wts=None, rp_buffer_file=None):
     input_channels = 1   # Assuming a single-channel input for the Connect Four board
     input_height = 6     # Connect Four board height
     input_width = 7      # Connect Four board width
     output_dim = 7       # One output for each column
 
-    print(f'A1 Convolutional layers: {cnn_a1}')
-    print(f'A2 Convolutional layers: {cnn_a2}')
-    print(f'A1 Fully connected layers: {fc_a1}')
+    print(f'A1 Convolutional layers:   {cnn_a1}')
+    print(f'A1 LSTM layers:            {lstm_a1}')
+    print(f'A1 Fully connected layers: {fc_a1}')    
+    print(f'A2 Convolutional layers:   {cnn_a2}')
+    print(f'A2 LSTM layers:            {lstm_a2}')    
     print(f'A2 Fully connected layers: {fc_a2}')
 
     # Initialize agents with the specified convolutional and fully connected layers
-    agent1 = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a1, fc_a1)
-    agent2 = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a2, fc_a2)
+    agent1 = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a1, lstm_a1, fc_a1)
+    agent2 = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a2, lstm_a2, fc_a2)
 
     replay_buffer = deque(maxlen=10000)  # Adjust size as needed
 
@@ -243,6 +243,8 @@ def main():
     try:
         cnn_a1 = ast.literal_eval(params["cnn_a1"])
         cnn_a2 = ast.literal_eval(params["cnn_a2"])
+        lstm_a1 = ast.literal_eval(params['lstm_a1'])
+        lstm_a2 = ast.literal_eval(params['lstm_a2'])
         fc_a1 = ast.literal_eval(params["fc_a1"])
         fc_a2 = ast.literal_eval(params["fc_a2"])
         render_games = ast.literal_eval(params["render_game_at"])
@@ -252,14 +254,18 @@ def main():
 
     cnn_a1 = ensure_list_of_tuples(cnn_a1)
     cnn_a2 = ensure_list_of_tuples(cnn_a2)
+    lstm_a1 = ensure_list_of_tuples(lstm_a1)    
+    lstm_a2 = ensure_list_of_tuples(lstm_a2) 
+
+
 
     # Check command line arguments
     if len(sys.argv) == 5:  # Expected: script name, agent1 weights, agent2 weights, buffer
-        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, sys.argv[2], sys.argv[3], sys.argv[4])
+        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, lstm_a1, lstm_a2, fc_a1, fc_a2, sys.argv[2], sys.argv[3], sys.argv[4])        
     elif len(sys.argv) == 4:  # Only agents, no buffer
-        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, sys.argv[2], sys.argv[3])
+        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2,  lstm_a1, lstm_a2, fc_a1, fc_a2, sys.argv[2], sys.argv[3])
     else:
-        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2)  
+        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2,  lstm_a1, lstm_a2, fc_a1, fc_a2)  
     
     assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
 
@@ -272,7 +278,6 @@ def main():
     # Create target networks for policy stabilization
     agent1_tgt = agent1
     agent2_tgt = agent2
-
     agent1_tgt = agent1_tgt.to(device)
     agent2_tgt = agent2_tgt.to(device)
     print(f'agent1.device: {agent1.device}')
@@ -297,6 +302,17 @@ def main():
     replay_buffer1 = ReplayBuffer(buffer_capacity)
     replay_buffer2 = ReplayBuffer(buffer_capacity)
 
+    # Load models and replay buffers if checkpoint file is provided
+    if len(sys.argv) == 3:
+        agent1, agent2, optimizer1, optimizer2, replay_buffer1, replay_buffer2 = (
+        load_all_models(agent1, agent2, 
+                        optimizer1, optimizer2, 
+                        replay_buffer1, replay_buffer2, 
+                        hyp_file_root, sys.argv[2]
+        ))
+
+
+
     episode_framecount = 0
     agent_1_score = 0
     agent_2_score = 0
@@ -310,7 +326,13 @@ def main():
     steps_per_game = 0
     ave_steps_per_game = 10
 
-    start_episode = params["start_episode"]
+    run_number = 1
+
+    if len(sys.argv) == 3:
+        start_episode = int(sys.argv[2])
+    else:
+        start_episode = params["start_episode"]
+        
     env.enable_reward_shaping(str_to_bool(params["enable_reward_shaping"]))
     env.enable_debug_mode(str_to_bool(params["env_debug_mode"]))
 
@@ -449,46 +471,27 @@ def main():
                 writer.add_scalar('Comp/Ratio Agent_1_to_Agent_2 Reward', agent_1_reward / agent_2_reward, episode)
 
             if done and (episode % params["ckpt_interval"] == 0):   
-                agent1_filename = f'./wts/m1_{hyp_file_root}'
-                agent2_filename = f'./wts/m2_{hyp_file_root}'    
-                replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}.pkl'
-                torch.save(agent1.state_dict(), agent1_filename+'.fcwts')
-                torch.save(agent2.state_dict(), agent2_filename+'.fcwts')
-                torch.save(agent1.state_dict(), agent1_filename+'.cnnwts')
-                torch.save(agent2.state_dict(), agent2_filename+'.cnnwts')    
-                with open(replay_buffer_filename, 'wb') as f:
-                    pickle.dump(replay_buffer, f)
-                    assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
+                save_all_models(agent1, optimizer1, "a1", replay_buffer1, f"./wts/chkpt_{hyp_file_root}_{episode}")
+                save_all_models(agent2, optimizer2, "a2", replay_buffer2, f"./wts/chkpt_{hyp_file_root}_{episode}")
+                
 
-                # redundent save_checkpoint(agent1, optimizer1, replay_buffer1, episode, f'{hyp_file_root}_1.ckpt')
-                # we need to switch over to this method, but retain the separate model weight files for play.py
-                #save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
-                #save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
-
-            if check_e_keypress():# or draw_score > 10:
-                if draw_score > 10:
-                    print('Draws > 10, exiting training loop')  
-                else:
-                    print('Keyboard Keypress -e- detected, exiting training loop')
+            if check_e_keypress():
+                print('Keyboard Keypress -e- detected, exiting training loop')
+                save_all_models(agent1, optimizer1, "a1", replay_buffer1, f"./wts/chkpt_{hyp_file_root}_{episode}")
+                save_all_models(agent2, optimizer2, "a2", replay_buffer2, f"./wts/chkpt_{hyp_file_root}_{episode}")
                 break
 
     writer.close()
 
 
     print(f'\nTraining ended on episode count: {episode}')
-    agent1_filename = f'./wts/m1_{hyp_file_root}'
-    agent2_filename = f'./wts/m2_{hyp_file_root}'    
-    replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}.pkl'
-    torch.save(agent1.state_dict(), agent1_filename+'.fcwts')
-    torch.save(agent2.state_dict(), agent2_filename+'.fcwts')
-    torch.save(agent1.state_dict(), agent1_filename+'.cnnwts')
-    torch.save(agent2.state_dict(), agent2_filename+'.cnnwts')    
-    with open(replay_buffer_filename, 'wb') as f:
-        pickle.dump(replay_buffer, f)
-        assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
+
 
 
  
+
+
+
     # Print the sizes of the saved models
     # checkpoint_a1 = torch.load(agent1_filename)
     # for key, tensor in checkpoint_a1.items():
@@ -520,8 +523,7 @@ def main():
         test_results_string += f'total_loss2 / num_steps2: {total_loss2 / num_steps2}\n'
     test_results_string += f'Input Parameters:\n'
     test_results_string += print_parameters(params)
-    test_results_string += f'models saved:\n{agent1_filename}\n'
-    test_results_string += f'replay buffer saved to\n{replay_buffer_filename}\n'
+
     if episode != end_episode-1:
         test_results_string += f'\n**Exited training loop early at episode {episode}'
         test_results_string += f'\nstart_episode = {episode}\n'
