@@ -13,7 +13,7 @@ runs/
 !.gitignore
 !/*
 !hyps/*
-
+!connect4_playground/**
 
 
 # Explicitly allow files in specified directories (non-recursive)

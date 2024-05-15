@@ -1,3 +1,7 @@
+
+
+#filename: check_cnn_fc_match.py
+
 import os
 import sys
 import time

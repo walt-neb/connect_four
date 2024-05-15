@@ -100,3 +100,5 @@ class CNNDDQNAgent(nn.Module):
                 return chosen_action
         else:
             return random.choice(valid_actions)  # Randomly choose from valid actions
+        
+        

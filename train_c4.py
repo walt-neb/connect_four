@@ -157,7 +157,7 @@ def soft_update(target_model, source_model, tau=0.005):
 # Define the Transition namedtuple
 Transition = namedtuple('Transition', ['state', 'action', 'reward', 'next_state', 'done'])
 
-def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
+def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma, tau=0.005):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     if len(replay_buffer) < batch_size:
         return torch.tensor(0.0, device=device)  # Not enough samples to train so return 0 loss
@@ -205,6 +205,9 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma):
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
+
+    # Soft update of the target network
+    soft_update(agent_tgt, agent, tau=0.005)
 
     return loss
 
@@ -340,7 +343,7 @@ def main():
                 replay_buffer1.push(state, action, reward, next_state, done)
                 #assert isinstance(replay_buffer1, deque), "Replay buffer is not a deque!"
 
-                loss1 = train(agent1, agent1_tgt, optimizer1, replay_buffer1, batch_size, gamma)
+                loss1 = train(agent1, agent1_tgt, optimizer1, replay_buffer1, batch_size, gamma, tau=0.005)
                 # Update target network using soft updates
                 if episode % update_frequency == 0:
                     soft_update(agent1_tgt, agent1, .05)
@@ -354,7 +357,7 @@ def main():
                 replay_buffer2.push(state, action, reward, next_state, done)
                 #assert isinstance(replay_buffer2, deque), "Replay buffer is not a deque!"
 
-                loss2 = train(agent2, agent2_tgt, optimizer2, replay_buffer2, batch_size, gamma)
+                loss2 = train(agent2, agent2_tgt, optimizer2, replay_buffer2, batch_size, gamma, tau=0.005)
                 if loss2 is not None:
                     total_loss2 += loss2.item()
                     num_steps2 += 1
@@ -543,3 +546,4 @@ if __name__ == '__main__':
     main()
     elapsed_time = time.time() - start_time
     print(f"Elapsed time: {elapsed_time} seconds")
+
