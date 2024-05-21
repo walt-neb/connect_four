@@ -51,11 +51,12 @@ def calculate_total_parameters(cnn_layers, fc_layers, input_channels=1):
     return total_params
 
 
-def explore_network_configurations(input_height: int, input_width: int,
+def explore_network_configurations(seq_num: int, input_height: int, input_width: int,
                                    conv_layers: List[Tuple[int, int, int, Optional[int]]],
                                    fc_layers: List[int]) -> Tuple[bool, List[int]]:
     current_height = input_height
     current_width = input_width
+    seq_num = seq_num
 
     for params in conv_layers:
         num_filters, kernel_size, stride = params[:3]
@@ -71,6 +72,7 @@ def explore_network_configurations(input_height: int, input_width: int,
     output_features = num_filters * current_height * current_width
     if fc_layers and fc_layers[0] != output_features:
         print(f"\nMismatch found: Adjust the first FC layer size from {fc_layers[0]} to {output_features}")
+        print(f'\noutput_features = num_filters * current_height * current_width = {num_filters} * {current_height} * {current_width} = {output_features}')
         fc_layers[0] = output_features
     else: 
         print(f"\nFC layer sizes are compatible with the output features of the CNN layers.")
@@ -138,7 +140,8 @@ def main():
         cnn_a2 = ast.literal_eval(params["cnn_a2"])
         fc_a1 = ast.literal_eval(params["fc_a1"])
         fc_a2 = ast.literal_eval(params["fc_a2"])
-        render_games = ast.literal_eval(params["render_game_at"])
+        seq_num = params["sequence_length"]
+
     except Exception as e:
         print(e)
         sys.exit(1)
@@ -158,7 +161,7 @@ def main():
  
 
     print("Checking network configurations for model1...")
-    valid, adjusted_fc_layers = explore_network_configurations(input_height, input_width, cnn_a1, fc_a1)
+    valid, adjusted_fc_layers = explore_network_configurations(seq_num, input_height, input_width, cnn_a1, fc_a1)
     if valid:
         print("Valid configuration with FC layers:", adjusted_fc_layers)
     else:
@@ -167,7 +170,7 @@ def main():
     print("Total parameters in the network 1:", total_parameters)        
 
     print("Checking network configurations for model2...")
-    valid, adjusted_fc_layers = explore_network_configurations(input_height, input_width, cnn_a2, fc_a2)
+    valid, adjusted_fc_layers = explore_network_configurations(seq_num, input_height, input_width, cnn_a2, fc_a2)
     if valid:
         print("Valid configuration with FC layers:", adjusted_fc_layers)
     else:

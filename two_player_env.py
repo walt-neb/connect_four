@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 class TwoPlayerConnectFourEnv():
-    def __init__(self, rows=6, columns=7, win_length=4, writer=None):
+    def __init__(self, rows=6, columns=7, win_length=4, writer=None, sequence_length=7):
         self.rows = rows
         self.columns = columns
         self.win_length = win_length
@@ -20,8 +20,9 @@ class TwoPlayerConnectFourEnv():
         self.winner = None
         self.total_steps = 0 
         self.writer = writer  # Store the SummaryWriter instance
-        self.reward_shaping = True
+        self.reward_shaping = False
         self.debug_mode = False
+        self.sequence_length = sequence_length
 
     def get_player_symbol(self, current_player):
         """
@@ -50,6 +51,11 @@ class TwoPlayerConnectFourEnv():
         if self.done:
             raise ValueError("Game is over.")
         if self.board[0, action] != 0:
+            board_state = self.board.copy()
+            self.render(board_state)
+            print(f'player {self.current_player}:\taction {action}')
+            print(f'Valid actions: {self.get_valid_actions()}')
+            print(f'Player symbol: {self.get_player_symbol(self.current_player)}')
             raise ValueError("Column is full.")
 
         row = max(np.where(self.board[:, action] == 0)[0])
@@ -92,20 +98,27 @@ class TwoPlayerConnectFourEnv():
 
         if self.debug_mode: #Print the details of the reward
             print(f'\n---- player {self.current_player}:\taction {action}---')
-            self.render()
-            print(f'reward for blocking: {r_block:.2f}')
-            print(f'reward for opportunities: {r_opp:.2f}')
-            print(f'reward for futile moves: {r_futil:.2f}')
-            #print(f'reward for forcing: {r_force:.2f}')
-            #print(f'reward for advanced patterns: {r_adv:.2f}')
+            board_state = self.board.copy()
+            self.render(board_state)
+            if self.reward_shaping:
+                print(f'reward for winning: {r_win:.2f}')
+                print(f'reward for blocking: {r_block:.2f}')
+                print(f'reward for opportunities: {r_opp:.2f}')
+                print(f'reward for futile moves: {r_futil:.2f}')
+                #print(f'reward for forcing: {r_force:.2f}')
+                #print(f'reward for advanced patterns: {r_adv:.2f}')
             print(f'Total reward: {reward:.2f}')
         
         self.current_player = 3 - self.current_player
         self.total_steps += 1
 
-        return self.board.flatten(), reward, self.done, self.current_player
+        next_state = self._get_next_state() 
+        return self.board.flatten(), next_state, reward, self.done, self.current_player
 
 
+    def _get_next_state(self):
+        next_state = self.board.flatten()
+        return next_state
 
 
     def check_win(self, player):
@@ -135,13 +148,22 @@ class TwoPlayerConnectFourEnv():
         return False
     
     def get_valid_actions(self):
-        return [col for col in range(self.columns) if self.board[0, col] == 0]
+        valid_col = [col for col in range(self.columns) if self.board[0, col] == 0]
+        if len(valid_col) != 7 and self.debug_mode:  # Check if all columns are considered when debug mode is enabled
+            print("Debugging get_valid_actions:")
+            board_state = self.board.copy()
+            self.render(board_state)
+            print("Valid columns identified: ", valid_col)
+        return valid_col
 
 
-    def render(self):
+    def render(self, board_state):
         symbols = {0: " . ", 1: " X ", 2: " O "}
         # Create a copy of the board for display purposes
-        display_board = self.board.copy()
+        if board_state is None:
+            board_state = self.board
+            
+        display_board = board_state
         
         # Function to highlight winning pieces
         def highlight_winning_pieces():
@@ -277,30 +299,4 @@ class TwoPlayerConnectFourEnv():
         return 0
     
 
-    def reward_for_advanced_patterns(self, board, player, move):
-        reward = 0
-        directions = [(1, 0), (0, 1), (1, 1), (-1, 1)]  # vertical, horizontal, diagonal, anti-diagonal
-        threat_count = 0
-
-        # Expand the check to include the initial position and extend further in both directions
-        for d in directions:
-            for step in [1, -1]:  # Check both directions
-                sequence = 0
-                for i in range(-3, 4):  # Expand range to check from three steps back to three steps forward
-                    r = move[0] + i * d[0] * step
-                    c = move[1] + i * d[1] * step
-                    if 0 <= r < board.shape[0] and 0 <= c < board.shape[1]:
-                        if board[r, c] == player:
-                            sequence += 1
-                        else:
-                            if sequence >= 3:  # Check if the sequence length before breaking is a threat
-                                threat_count += 1
-                            sequence = 0
-
-        reward = 0.1 * threat_count  # Reward each threat detected
-        print(f"Debugging - Threats: {threat_count}, Reward: {reward}")
-        return reward
-
-
-    
 

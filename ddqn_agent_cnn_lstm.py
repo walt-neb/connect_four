@@ -17,7 +17,7 @@ import numpy as np
 
 class CNNDDQNAgent(nn.Module):
     def __init__(self, input_channels, input_height, input_width, output_dim, 
-                 conv_layers, lstm_layers, fc_layers): 
+                 conv_layers, lstm_layers, fc_layers, seq_length): 
         super(CNNDDQNAgent, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -25,6 +25,7 @@ class CNNDDQNAgent(nn.Module):
         current_channels = input_channels
         current_height = input_height
         current_width = input_width
+        self.seq_length = seq_length
         modules = []
 
         for layer_params in conv_layers:
@@ -49,10 +50,8 @@ class CNNDDQNAgent(nn.Module):
         # Calculate the total number of features after flattening
         self.num_flattened_features = current_channels * current_height * current_width
 
-
         #fully connected linear layer between the CNN and the LSTM to transform the CNN output to the desired dimensional input for the LSTM:
         self.cnn_to_lstm = nn.Linear(self.num_flattened_features, lstm_layers[0][1]) 
-
 
         # --- LSTM Layers ---
         lstm_modules = []
@@ -80,54 +79,72 @@ class CNNDDQNAgent(nn.Module):
         self.fc = nn.Sequential(*fc_modules)
 
     def forward(self, x):
-        # --- CNN
+        # --- CNN ---
         x = self.conv(x)
-        
-        # Flatten the output from the convolutional layers 
-        x = x.view(-1, self.num_flattened_features)
 
-        x = self.cnn_to_lstm(x)  # Transform CNN output to LSTM input size
+        # Flatten the output from the convolutional layers to feed to the fully connected layers
+        # print shape of input tensor x before flattening
+        x = x.view(-1, self.seq_length, self.num_flattened_features)
+
+
+        # --- Pass through intermediate FC layer to adjust for LSTM --- 
+        x = self.cnn_to_lstm(x)
         
         # --- LSTM ---
-        lstm_out = x.unsqueeze(1)  # Add time dimension
-        for lstm_layer in self.lstm:
-            lstm_out, _ = lstm_layer(lstm_out)  # Process each LSTM layer separately
-    
-        # Take the last hidden state of the last LSTM layer 
-        lstm_out = lstm_out[:, -1, :]
+        lstm_out, _ = self.lstm(x)  # Remove unsqueeze, input is already in sequence format
+        lstm_out = lstm_out[:, -1, :]  # Take the last hidden state
 
         # --- FC ---
         output = self.fc(lstm_out)
         return output
+
 
     def get_epsilon(self, epsilon_step_count, num_episodes, initial_epsilon, minimum_epsilon):
         decay_rate = -math.log(minimum_epsilon / initial_epsilon) / num_episodes
         current_epsilon = initial_epsilon * math.exp(-decay_rate * epsilon_step_count)
         return max(current_epsilon, minimum_epsilon)
 
-    def select_action(self, state_array, valid_actions, epsilon):
+    def select_action(self, state_seq, valid_actions, epsilon):
         if random.random() > epsilon:
             with torch.no_grad():
-                # Convert the NumPy array to a PyTorch tensor, ensure it's float, and add batch and channel dimensions
-                state_tensor = torch.from_numpy(state_array).float()
-                # Reshape the state tensor from (42,) to [1, 1, 6, 7] (batch size, channels, height, width)
-                state_tensor = state_tensor.view(1, 1, 6, 7)  # Adjusted from unsqueeze to view for correct reshaping
-                state_tensor = state_tensor.to(self.device)  # Move tensor to the correct device
+                # Convert the NumPy array to a PyTorch tensor, ensure it's float, and format it correctly
+                state_seq_array = np.array(state_seq, dtype=np.float32).reshape((-1, self.seq_length, 6, 7))
+                state_seq_tensor = torch.tensor(state_seq_array).to(self.device)  # Convert to tensor and send to device
+                state_seq_tensor = state_seq_tensor.unsqueeze(1)  # Correctly adding the channel dimension: [batch, channels, height, width]
 
-                # Get Q-values
-                q_values = self.forward(state_tensor)
+                # Get Q-values from the network
+                q_values = self.forward(state_seq_tensor)
 
-                # Create a mask to invalidate actions
-                inf_mask = torch.full_like(q_values, float('inf'), device=self.device)
-                valid_mask = torch.zeros_like(q_values, device=self.device)
-                valid_mask[0, valid_actions] = 1  # Set valid actions to 1
-
-                # Apply mask: Set invalid actions to negative infinity
-                masked_q_values = torch.where(valid_mask.bool(), q_values, -inf_mask)
-
-                # Select the best action from masked Q-values
-                chosen_action = masked_q_values.argmax(dim=1).item()
+                # Assuming q_values are processed to choose an action
+                chosen_action = q_values.argmax().item()  # Simplified action selection for demonstration
                 return chosen_action
         else:
             return random.choice(valid_actions)  # Randomly choose from valid actions
+
+    # def select_action(self, state_seq, valid_actions, epsilon):
+    #     if random.random() > epsilon:
+    #         with torch.no_grad():
+    #             # Convert the NumPy array to a PyTorch tensor, ensure it's float, and format it correctly
+    #             state_seq_array = np.array(state_seq, dtype=np.float32).reshape((-1, self.seq_length, 6, 7))
+    #             state_seq_tensor = torch.tensor(state_seq_array).unsqueeze(1).to(self.device)  # Adding the channel dimension
+    #             state_seq_tensor = state_seq_tensor.unsqueeze(1)  # Adding the channel dimension to match [batch, channels, height, width]
+
+    #             # Get Q-values from the network
+    #             q_values = self.forward(state_seq_tensor)
+
+    #             # Create a mask to invalidate actions
+    #             inf_mask = torch.full_like(q_values, float('inf'), device=self.device)
+    #             valid_mask = torch.zeros_like(q_values, device=self.device)
+    #             valid_mask[0, valid_actions] = 1  # Set valid actions to 1
+
+    #             # Apply mask: Set invalid actions to negative infinity
+    #             masked_q_values = torch.where(valid_mask.bool(), q_values, -inf_mask)
+
+    #             # Select the best action from masked Q-values
+    #             chosen_action = masked_q_values.argmax(dim=1).item()
+    #             return chosen_action
+    #     else:
+    #         return random.choice(valid_actions)  # Randomly choose from valid actions
+        
+
         
