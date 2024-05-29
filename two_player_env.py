@@ -113,7 +113,8 @@ class TwoPlayerConnectFourEnv():
         self.total_steps += 1
 
         next_state = self._get_next_state() 
-        return self.board.flatten(), next_state, reward, self.done, self.current_player
+        #return self.board.flatten(), 
+        return next_state, reward, self.done, self.current_player
 
 
     def _get_next_state(self):
@@ -162,6 +163,10 @@ class TwoPlayerConnectFourEnv():
         # Create a copy of the board for display purposes
         if board_state is None:
             board_state = self.board
+
+        if board_state.shape != (self.rows, self.columns):
+            #reshape the board_state
+            board_state = np.array(board_state).reshape(self.rows, self.columns)
             
         display_board = board_state
         

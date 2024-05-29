@@ -19,15 +19,15 @@ class TransformerAgent(nn.Module):
         self.fc = nn.Linear(embed_dim, output_dim)
 
     def forward(self, x):
-        print(f"forward Input x.shape: {x.shape}")
+        #print(f"forward Input x.shape: {x.shape}")
         x = self.embedding(x)  # Shape: [batch_size, embed_dim]
-        print(f"forward Embedding x.shape: {x.shape}")
+        #print(f"forward Embedding x.shape: {x.shape}")
         x = self.pos_encoder(x.unsqueeze(1))  # Shape: [batch_size, 1, embed_dim]
-        print(f"forward Positional Encoding x.shape: {x.shape}")
+        #print(f"forward Positional Encoding x.shape: {x.shape}")
         x = self.transformer_encoder(x)  # Shape: [batch_size, 1, embed_dim]
-        print(f"forward Transformer Encoder x.shape: {x.shape}")
+        #print(f"forward Transformer Encoder x.shape: {x.shape}")
         x = self.fc(x.squeeze(1))  # Shape: [batch_size, output_dim]
-        print(f"forward Output x.shape: {x.shape}")
+        #print(f"forward Output x.shape: {x.shape}")
         return x
 
 class PositionalEncoding(nn.Module):
@@ -44,7 +44,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        print(f"PE Input x.shape: {x.shape}")
+        #print(f"PE Input x.shape: {x.shape}")
         x = x + self.pe[:, :x.size(1), :]
-        print(f"PE Output x.shape: {x.shape}")
+        #print(f"PE Output x.shape: {x.shape}")
         return self.dropout(x)

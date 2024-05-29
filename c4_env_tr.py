@@ -58,15 +58,13 @@ class ConnectFourEnv:
 
         # Win check
         if self.check_win(player=self.current_player):
-            r_win = 7 # Reward for winning is larger
-            #print(f'\tplayer {self.current_player}:\twinning\t\t{reward:.2f}')
             self.done = True
             self.winner = self.current_player
-            if self.writer is not None:
-                self.writer.add_scalar(f'Env/Win_player_{self.current_player}', 1, self.total_steps)
+            reward = 1 if self.winner == self.current_player else -1
         elif np.all(self.board != 0):
             self.done = True
             self.winner = None
+            reward = 0.5
             if self.writer is not None:
                 self.writer.add_scalar('Env/Draw', 1, self.total_steps)
         
@@ -77,8 +75,7 @@ class ConnectFourEnv:
             r_futil = self.reward_for_futile_moves(self.board, action)            
             #r_force = self.reward_for_forcing(self.board, self.current_player, last_move)
             #r_adv   = self.reward_for_advanced_patterns(self.board, self.current_player, last_move)
-        
-        reward = r_win + r_block + r_opp + r_futil + r_force
+            #reward = r_win + r_block + r_opp + r_futil + r_force
 
         if self.debug_mode: #Print the details of the reward
             print(f'\n---- player {self.current_player}:\taction {action}---')
@@ -121,6 +118,38 @@ class ConnectFourEnv:
             board_state = np.array(board_state).reshape(self.rows, self.columns)
             
         display_board = board_state
+        
+        # Function to highlight winning pieces
+        def highlight_winning_pieces():
+            # Check all possible directions for a win
+            directions = [(1, 0), (0, 1), (1, 1), (1, -1)]  # horizontal, vertical, diagonal, anti-diagonal
+            for r in range(self.rows):
+                for c in range(self.columns):
+                    current_player = self.board[r][c]
+                    if current_player != 0:
+                        for dr, dc in directions:
+                            # Check if there are four in a row starting from (r, c)
+                            if all(0 <= r + i * dr < self.rows and 0 <= c + i * dc < self.columns and
+                                self.board[r + i * dr][c + i * dc] == current_player for i in range(self.win_length)):
+                                # Highlight all pieces in this sequence
+                                for i in range(self.win_length):
+                                    rr, cc = r + i * dr, c + i * dc
+                                    display_board[rr][cc] = -current_player  # Use negative to denote winning pieces
+                                return
+
+        if self.winner is not None:
+            highlight_winning_pieces()
+
+        # Update the symbols dictionary to include color for winning pieces
+        symbols[-1] = "\033[94m X \033[0m"  # Blue "X"
+        symbols[-2] = "\033[94m O \033[0m"  # Blue "O"
+
+        print("  " + "   ".join(map(str, range(self.columns))))
+        for row in display_board:
+            print(" |" + "|".join(symbols[cell] for cell in row) + "|")
+        print()
+
+        return self.winner
 
     def check_win(self, player):
         # Horizontal, vertical, and diagonal checks

@@ -9,31 +9,35 @@ class ReplayBuffer:
         self.buffer = deque(maxlen=capacity)
         self.sequence_length = sequence_length
 
+    def get_len(self):
+        return len(self.buffer)
+    
+    def set_env(self, env):
+        self.env = env  # Store the environment for debugging
+    
     def push(self, state_seq, action, reward, next_state_seq, done): 
         """Add a sequence of experiences to the replay buffer.
 
         Args:
-            state_seq (list or np.ndarray): A sequence of states.
-            action (int): The action taken at the last state in the sequence.
-            reward (float): The reward received after taking the action.
-            next_state_seq (list or np.ndarray): The sequence of states after the action. 
-            done (bool): Whether the episode ended after the action.
+            state_seq (list or np.ndarray): A sequence of states
+            action (int): The action taken at the last state in the sequence
+            reward (float): The reward received after taking the action
+            next_state_seq (list or np.ndarray): The sequence of states after the action
+            done (bool): Whether the episode ended after the action
+        Indexing Sequenced Replay Buffer:
+        replay_buffer.buffer: This accesses the entire buffer which contains all the sequences
+        replay_buffer.buffer[i]: This accesses the i-th sequence in the buffer
+        replay_buffer.buffer[i][j]: This accesses the j-th transition in the i-th sequence
+        replay_buffer.buffer[i][j][k]: This accesses the k-th element of the j-th transition in the i-th sequence 
+            (k = 0 for state, 1 for action, 2 for reward, 3 for next_state, 4 for done)
         """
-        if len(self.buffer) > 0 and not self.buffer[-1][-1][4]:  # if the buffer is not empty and the last sequence is not done
-            last_state = self.buffer[-1][-1][3]  # get last next_state from the last transition in the buffer
-            if not np.array_equal(last_state, state_seq[0]):
-                print("Error: State transition mismatch")
-                print("Expected state:", last_state)
-                print("Received state:", state_seq[0])
-                return  # Optionally return to skip adding this transition if it is not valid
-
 
         # Ensure both state sequences have the same length as specified by self.sequence_length
         if len(state_seq) != self.sequence_length or len(next_state_seq) != self.sequence_length:
             print(f'len(state_seq): {len(state_seq)}, len(next_state_seq): {len(next_state_seq)}')
             print(f'self.sequence_length: {self.sequence_length}')
             print(f'state_seq: {state_seq}')
-            raise ValueError(f"State sequences must have length {self.sequence_length}")
+            raise ValueError(f"push error - State sequences must have length {self.sequence_length}")
 
         # Create an experience for the last step in the sequence
         last_experience = (state_seq[-1], action, reward, next_state_seq[-1], done)
@@ -47,21 +51,10 @@ class ReplayBuffer:
             self.buffer[-1].append((state_seq[i], 0, 0, next_state_seq[i], False))  # Actions/rewards/dones are irrelevant for intermediate states
         self.buffer[-1].append(last_experience)  # Append the last experience
 
-        # Debugging: Check and log the continuity of states
-        if len(self.buffer[-1]) > 1:
-            last_state_in_seq = self.buffer[-1][-2][3]  # previous next_state
-            current_state = state_seq[0]
-            if not np.array_equal(last_state_in_seq, current_state):
-                print("ReplayBuffer Push Error:")
-                print("Discontinuity detected between sequences")
-                print("Last state in seq:", last_state_in_seq)
-                print("Current state:", current_state)
-
-
-
     def sample(self, batch_size):
         # Ensure enough sequences for a batch
-        if len(self.buffer) < batch_size:
+        sb_len = len(self.buffer)
+        if sb_len < batch_size:
             return []
 
         # Sample random complete sequences

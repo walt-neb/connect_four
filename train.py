@@ -29,6 +29,16 @@ import torch
 import pickle
 from torch.utils.tensorboard import SummaryWriter
 
+dbmode=1
+def str_to_bool(s):
+    result = s.lower() == 'true'
+    return result
+
+def ensure_list_of_tuples(data):
+    if isinstance(data, tuple):
+        return [data]
+    return data
+
 
 def load_hyperparams(hyp_file):
     params = {}
@@ -114,7 +124,8 @@ def load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, seq_len=7, rp_size=1000
     agent1 = CNN3D(input_channels, seq_len, input_height, input_width, output_dim, cnn_a1, fc_a1)
     agent2 = CNN3D(input_channels, seq_len, input_height, input_width, output_dim, cnn_a2, fc_a2)
 
-    replay_buffer = deque(maxlen=rp_size)  # Adjust size as needed
+    replay_buffer1 = deque(maxlen=rp_size)  # Adjust size as needed
+    replay_buffer2 = deque(maxlen=rp_size)  # Adjust size as needed
 
     # Load weights if paths are provided
     if agent1_wts and os.path.exists(agent1_wts):    
@@ -133,15 +144,18 @@ def load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, seq_len=7, rp_size=1000
 
     # Load replay buffer if a file is provided
     if rp_buffer_file and os.path.exists(rp_buffer_file):
-        with open(rp_buffer_file, 'rb') as f:
-            replay_buffer = pickle.load(f)
-            assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
+        with open(rp_buffer_file+'_a1', 'rb') as f:
+            replay_buffer1 = pickle.load(f)
+            assert isinstance(replay_buffer1, deque), "Replay buffer is not a deque!"
+        with open(rp_buffer_file+'_a2', 'rb') as f:
+            replay_buffer2 = pickle.load(f)
+            assert isinstance(replay_buffer2, deque), "Replay buffer is not a deque!"
 
-        print(f"Loaded replay buffer from {rp_buffer_file}.")
+        print(f"Loaded replay buffers from {rp_buffer_file}.")
     else:
-        print(f"Starting new replay buffer or file not found: {rp_buffer_file}")
+        print(f"Starting new replay buffers or file not found: {rp_buffer_file}")
 
-    return agent1, agent2, replay_buffer
+    return agent1, agent2, replay_buffer1, replay_buffer2
 
 
 def soft_update(target_model, source_model, tau=0.005):
@@ -171,18 +185,24 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma, sequenc
     # Sample a batch of sequences from the replay buffer
     transitions = replay_buffer.sample(batch_size)
 
+
     #Assuming transitions is a list of sequences and each sequence is a list of tuples (state, action, reward, next_state, done)
     for i, seq in enumerate(transitions):
-        print(f"Rendering sequence {i+1}/{len(transitions)}")
+        print(f"\n\ntrain() - Rendering sequence {i+1}/{len(transitions)}")
         for j, transition in enumerate(seq):
             state = transition[0]  # This is the flattened state array
             # Reshape the flattened state back into a 6x7 board
             reshaped_state = state.reshape((6, 7))
             print(f"Board State: {j+1}/{len(seq)}")
             env.render(reshaped_state)  
+            print(f"Reward: {transition[2]}, Done: {transition[4]}")
+            reshaped_next_state = transition[3].reshape((6, 7))
+            print(f"Next State:")
+            env.render(reshaped_next_state)
+            print("\n")
 
 
-    sys.exit(0)
+
     # Extract and pad sequences
     state_seqs = []
     next_state_seqs = []
@@ -246,16 +266,23 @@ def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma, sequenc
 
     return loss
 
+def pad_sequence(sequence, seq_len, pad_value=-1):
+    padding_size = seq_len - len(sequence)
+    if padding_size > 0:
+        # Pad with arrays filled with the padding value
+        padded_sequence = sequence + [np.full((6, 7), pad_value) for _ in range(padding_size)]
+    else:
+        padded_sequence = sequence
+    return padded_sequence
 
-dbmode=1
-def str_to_bool(s):
-    result = s.lower() == 'true'
-    return result
+# Example masking in loss calculation
+def masked_loss(output, target, mask):
+    masked_output = torch.masked_select(output, mask)
+    masked_target = torch.masked_select(target, mask)
+    return torch.nn.functional.mse_loss(masked_output, masked_target)
 
-def ensure_list_of_tuples(data):
-    if isinstance(data, tuple):
-        return [data]
-    return data
+# Assuming `mask` is a tensor of the same shape as `output` and `target`,
+# containing True for valid data points and False for padded data points.
 
 def main():
 
@@ -336,6 +363,9 @@ def main():
     # Main training loop
     replay_buffer1 = ReplayBuffer(buffer_capacity, seq_len)
     replay_buffer2 = ReplayBuffer(buffer_capacity, seq_len)
+    replay_buffer1.set_env(env)
+    replay_buffer2.set_env(env)
+
 
     # Load models and replay buffers if checkpoint file is provided
     if len(sys.argv) == 3:
@@ -354,7 +384,7 @@ def main():
     agent_2_starts = 0
     agent_1_reward = 0
     agent_2_reward = 0
-    update_frequency = 1000
+    update_frequency = 100
     gamma = params["gamma"]
     steps_per_game = 0
     ave_steps_per_game = 10
@@ -397,6 +427,11 @@ def main():
             #writer.add_scalar(f'agent_1_starts/agent_2_starts={agent_1_starts/agent_2_starts:.3f}', episode)
             pass
 
+        state_seq1 = deque(maxlen=sequence_length)  # Initialize the state sequence for the episode
+        state_seq2 = deque(maxlen=sequence_length)  # Initialize the state sequence for the episode
+
+
+
         while not done:
             logthis = False
             valid_actions = env.get_valid_actions()
@@ -405,22 +440,31 @@ def main():
             
             # Determine which agent is playing
             if current_player == 1:
-                action = agent1.select_action(state_seq, valid_actions, epsilon1) 
-                board, next_state, reward, done, next_player = env.step(action)
+                action1 = agent1.select_action(state_seq1, valid_actions, epsilon1) 
+                board, next_state1, reward1, done, next_player = env.step(action1)
+                num_steps1 += 1
 
                 if not done:
                     # Construct next_state_seq (assuming sequence_length = 7)
-                    next_state_seq = deque(state_seq)  # Create a new deque without maxlen
-                    next_state_seq.append(next_state)
-                    next_state_seq.popleft()  # Remove the oldest state from the copied deque
+                    next_state_seq1 = deque(state_seq1)  # Create a new deque without maxlen
+                    next_state_seq1.append(next_state1)
+
 
                 # Push sequences to replay buffers
-                replay_buffer1.push(list(state_seq), action, reward, list(next_state_seq), done) 
+                replay_buffer1.push(list(state_seq1), action1, reward1, list(next_state_seq1), done) 
+                #display status of replay buffer
+                
+                print(f'\nmain() - Pushed to replay buffer 1 for episode={episode}, game moves={num_steps1 + num_steps2}:')
+                print(f'replay1.get_len()={replay_buffer1.get_len()}')
+                #print(f'replay1.buffer[0]={replay_buffer1.buffer[0]}')
+                print(f'current_state1')
+                env.render(replay_buffer1.buffer[0][0][0]) #state
+                print(f'next_state1')
+                env.render(replay_buffer1.buffer[0][3][0]) #next state
 
                 # Update the state sequence (append and remove the oldest state)
-                state_seq = deque(state_seq)  # Create a new deque without maxlen                
-                state_seq.append(next_state)
-                state_seq.popleft()
+                state_seq1 = deque(state_seq1)  # Create a new deque without maxlen                
+                state_seq1.append(next_state1)
 
                 loss1 = train(agent1, agent1_tgt, optimizer1, replay_buffer1, batch_size, gamma, seq_len, env, tau=0.005)
 
@@ -430,24 +474,32 @@ def main():
                 
                 if loss1 is not None:
                     total_loss1 += loss1.item()
-                    num_steps1 += 1
+                    
             else:
-                action = agent2.select_action(state_seq, valid_actions, epsilon2) 
-                board, next_state, reward, done, next_player = env.step(action)
+                action2 = agent2.select_action(state_seq2, valid_actions, epsilon2) 
+                board, next_state2, reward2, done, next_player = env.step(action2)
+                num_steps2 += 1
 
                 if not done:
                     # Construct next_state_seq (assuming sequence_length = 7)
-                    next_state_seq = deque(state_seq)  # Create a new deque without maxlen
-                    next_state_seq.append(next_state)
-                    next_state_seq.popleft()  # Remove the oldest state from the copied deque                  
+                    next_state_seq2 = deque(state_seq2)  # Create a new deque without maxlen
+                    next_state_seq2.append(next_state2)
+          
 
                 # Push sequences to replay buffers
-                replay_buffer2.push(list(state_seq), action, reward, list(next_state_seq), done) 
+                replay_buffer2.push(list(state_seq2), action2, reward2, list(next_state_seq2), done) 
+                #display status of replay buffer
+                print(f'\nmain() - Pushed to replay buffer 2 for episode={episode}, game moves={num_steps1 + num_steps2}:')
+                print(f'replay2.get_len()={replay_buffer2.get_len()}')
+                print(f'current_state2')
+                env.render(replay_buffer2.buffer[0][0][0]) #state
+                print(f'next_state2')
+                env.render(replay_buffer2.buffer[0][3][0]) #next state
+
 
                 # Update the state sequence (append and remove the oldest state)
-                state_seq = deque(state_seq)  # Create a new deque without maxlen
-                state_seq.append(next_state)
-                state_seq.popleft()
+                state_seq2 = deque(state_seq2)  # Create a new deque without maxlen
+                state_seq2.append(next_state2)
 
                 loss2 = train(agent2, agent2_tgt, optimizer2, replay_buffer2, batch_size, gamma, seq_len, env, tau=0.005)
 
@@ -457,19 +509,28 @@ def main():
 
                 if loss2 is not None:
                     total_loss2 += loss2.item()
-                    num_steps2 += 1
+                   
 
             if episode in render_games: # or steps_per_game > 40: 
                 #logthis = True
-                print(f"----Episode {episode} Step {num_steps1 + num_steps2}")                
+                print(f"main() ----Episode {episode} Step {num_steps1 + num_steps2}")                
                 winner = env.render(None) 
                 #print(f"Agent {current_player} playing ({env.get_player_symbol(current_player)}) takes action {action} receives reward of {reward:.2f}")   
                 #input("Press key to continue...")
 
             if not done:
-                state = next_state
+                state1 = next_state1
+                state2 = next_state2
                 current_player = next_player
             #print('.', end='')
+
+        # On episode completion
+        if done:
+            replay_buffer1.push(list(state_seq), action1, reward1, [], done)  # Push the final state with an empty next_state
+            replay_buffer2.push(list(state_seq), action2, reward2, [], done)  # Push the final state with an empty next_state
+            state_seq1.clear()  # Clear for the next game
+            state_seq2.clear()  # Clear for the next game
+            print(f"Episode finished. Sequence reset.")
 
         # track the scores
         if env.winner == 1:
