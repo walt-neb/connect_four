@@ -1,5 +1,6 @@
-#filename = 'c4_play_tr.py'
 
+#filename = 'c4_play_tr.py'
+# This script allows you to play Connect Four against a trained Transformer model.
 
 import torch.optim as optim
 import numpy as np

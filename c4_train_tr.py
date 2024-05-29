@@ -1,3 +1,6 @@
+
+# This script trains a Transformer model to play Connect Four.
+
 import torch.optim as optim
 import numpy as np
 import curses

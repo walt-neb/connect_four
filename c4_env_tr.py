@@ -1,5 +1,8 @@
 
 #c4_env_tr.py
+# This script defines the ConnectFourEnv class, which is an environment for playing Connect Four.
+# The environment is used for training a Transformer model to play Connect Four.
+
 
 import numpy as np
 import random
@@ -176,3 +179,4 @@ class ConnectFourEnv:
                     return True
 
         return False
+    
