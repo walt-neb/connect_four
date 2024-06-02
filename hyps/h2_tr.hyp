@@ -1,21 +1,20 @@
 # Hyperparameters
 
-num_epochs = 30000
-embed_dim = 256
-n_heads = 4
-ff_dim = 512
-n_layers = 4
+num_epochs = 15000
+embed_dim = 128
+n_heads = 2
+ff_dim = 128
+n_layers = 2
 dropout = 0.1
-capacity = 5000
+capacity = 8000
 batch_size = 64
 gamma = 0.99
 learning_rate = .00005
-epsilon = .05  
+epsilon = .10  
 epsilon_min = 0.01  
 epsilon_decay = 0.999
-input_dim = 42
 output_dim = 7
-
+input_dim = 42
 
 
 ----------- Training Results ----------------
@@ -238,23 +237,23 @@ start_episode = 26794
 
 
 ----------- Training Results ----------------
-Started training at: 	2024-05-30  21:12:01
-Ended training at: 	2024-06-01  07:33:32
-Total training time:  1 day, 10:21:31.446303
-epoch count: 79999
+Started training at: 	2024-05-30  08:04:00
+Ended training at: 	2024-05-30  11:09:03
+Total training time:  3:05:03.288226
+epoch count: 19999
 end epsilon: 0.009998671593271896
 Input Parameters:
 		input_dim :	42
-		embed_dim :	256
-		n_heads :	4
-		ff_dim :	512
-		n_layers :	4
+		embed_dim :	128
+		n_heads :	2
+		ff_dim :	128
+		n_layers :	2
 		output_dim :	7
 		dropout :	0.1
-		capacity :	5000
+		capacity :	8000
 		batch_size :	64
 		gamma :	0.99
-		num_epochs :	80000
+		num_epochs :	20000
 		learning_rate :	5e-05
 		epsilon :	1.0
 		epsilon_min :	0.01
@@ -264,26 +263,78 @@ Input Parameters:
 
 
 ----------- Training Results ----------------
-Started training at: 	2024-06-02  07:42:59
-Ended training at: 	2024-06-02  10:49:16
-Total training time:  3:06:17.420106
-epoch count: 9999
+Started training at: 	2024-05-30  21:05:33
+Ended training at: 	2024-05-31  02:06:06
+Total training time:  5:00:32.895149
+epoch count: 19999
 end epsilon: 0.009998671593271896
 Input Parameters:
-		num_epochs :	10000
-		embed_dim :	256
-		n_heads :	4
-		ff_dim :	512
-		n_layers :	4
+		input_dim :	42
+		embed_dim :	128
+		n_heads :	2
+		ff_dim :	128
+		n_layers :	2
+		output_dim :	7
 		dropout :	0.1
-		capacity :	5000
+		capacity :	8000
 		batch_size :	64
 		gamma :	0.99
+		num_epochs :	20000
 		learning_rate :	5e-05
 		epsilon :	1.0
 		epsilon_min :	0.01
 		epsilon_decay :	0.999
+		start_episode :	26794
+
+
+
+----------- Training Results ----------------
+Started training at: 	2024-05-31  10:59:09
+Ended training at: 	2024-05-31  12:01:22
+Total training time:  1:02:13.016417
+epoch count: 4999
+end epsilon: 0.009998671593271896
+Input Parameters:
 		input_dim :	42
+		embed_dim :	128
+		n_heads :	2
+		ff_dim :	128
+		n_layers :	2
 		output_dim :	7
+		dropout :	0.1
+		capacity :	8000
+		batch_size :	64
+		gamma :	0.99
+		num_epochs :	5000
+		learning_rate :	5e-05
+		epsilon :	1.0
+		epsilon_min :	0.01
+		epsilon_decay :	0.999
+		start_episode :	26794
+
+
+
+----------- Training Results ----------------
+Started training at: 	2024-05-31  14:23:45
+Ended training at: 	2024-05-31  17:15:57
+Total training time:  2:52:12.201178
+epoch count: 14999
+end epsilon: 0.009994334856146604
+Input Parameters:
+		num_epochs :	15000
+		embed_dim :	128
+		n_heads :	2
+		ff_dim :	128
+		n_layers :	2
+		dropout :	0.1
+		capacity :	8000
+		batch_size :	64
+		gamma :	0.99
+		learning_rate :	5e-05
+		epsilon :	0.1
+		epsilon_min :	0.01
+		epsilon_decay :	0.999
+		output_dim :	7
+		input_dim :	42
 		start_episode :	26794
 

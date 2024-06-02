@@ -1,21 +1,21 @@
 # Hyperparameters
 
-num_epochs = 30000
+num_epochs = 10000
 embed_dim = 256
-n_heads = 4
-ff_dim = 512
+n_heads = 2
+ff_dim = 256
 n_layers = 4
 dropout = 0.1
-capacity = 5000
+capacity = 8000
 batch_size = 64
 gamma = 0.99
 learning_rate = .00005
-epsilon = .05  
+epsilon = 1.0  
 epsilon_min = 0.01  
 epsilon_decay = 0.999
+
 input_dim = 42
 output_dim = 7
-
 
 
 ----------- Training Results ----------------
@@ -238,11 +238,11 @@ start_episode = 26794
 
 
 ----------- Training Results ----------------
-Started training at: 	2024-05-30  21:12:01
-Ended training at: 	2024-06-01  07:33:32
-Total training time:  1 day, 10:21:31.446303
-epoch count: 79999
-end epsilon: 0.009998671593271896
+Started training at: 	2024-05-30  08:05:04
+Ended training at: 	2024-05-30  08:26:13
+Total training time:  0:21:09.135740
+epoch count: 1127
+end epsilon: 0.323497343674428
 Input Parameters:
 		input_dim :	42
 		embed_dim :	256
@@ -261,22 +261,51 @@ Input Parameters:
 		epsilon_decay :	0.999
 		start_episode :	26794
 
+**Exited training loop early at episode 1127
+start_episode = 1127
+
 
 
 ----------- Training Results ----------------
-Started training at: 	2024-06-02  07:42:59
-Ended training at: 	2024-06-02  10:49:16
-Total training time:  3:06:17.420106
+Started training at: 	2024-05-30  08:26:19
+Ended training at: 	2024-05-31  14:00:28
+Total training time:  1 day, 5:34:08.755404
+epoch count: 79999
+end epsilon: 0.009998671593271896
+Input Parameters:
+		input_dim :	42
+		embed_dim :	256
+		n_heads :	2
+		ff_dim :	256
+		n_layers :	4
+		output_dim :	7
+		dropout :	0.1
+		capacity :	8000
+		batch_size :	64
+		gamma :	0.99
+		num_epochs :	80000
+		learning_rate :	5e-05
+		epsilon :	1.0
+		epsilon_min :	0.01
+		epsilon_decay :	0.999
+		start_episode :	1127
+
+
+
+----------- Training Results ----------------
+Started training at: 	2024-05-31  14:26:48
+Ended training at: 	2024-05-31  19:05:58
+Total training time:  4:39:09.712858
 epoch count: 9999
 end epsilon: 0.009998671593271896
 Input Parameters:
 		num_epochs :	10000
 		embed_dim :	256
-		n_heads :	4
-		ff_dim :	512
+		n_heads :	2
+		ff_dim :	256
 		n_layers :	4
 		dropout :	0.1
-		capacity :	5000
+		capacity :	8000
 		batch_size :	64
 		gamma :	0.99
 		learning_rate :	5e-05
@@ -285,5 +314,5 @@ Input Parameters:
 		epsilon_decay :	0.999
 		input_dim :	42
 		output_dim :	7
-		start_episode :	26794
+		start_episode :	1127
 

@@ -56,6 +56,8 @@ def print_parameters(params):
 
 def main():
 
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
     # Action selection with epsilon-greedy policy
     def select_action(state, epsilon):
         if np.random.rand() <= epsilon:
@@ -110,6 +112,8 @@ def main():
     # Initialize components
     env = ConnectFourEnv()
     agent = TransformerAgent(input_dim, embed_dim, n_heads, ff_dim, n_layers, output_dim, dropout)
+    agent = agent.to(device)
+    print(f'Agent running on device: {agent}')
     if len(sys.argv) == 3:
         model_file = f'./wts/{hyp_file_root}.pth'
         print(f'Continuing training on model {model_file}')
@@ -138,11 +142,11 @@ def main():
                 batch = replay_buffer.sample(batch_size)
                 state_batch, action_batch, reward_batch, next_state_batch, done_batch = zip(*batch)
 
-                state_batch = torch.FloatTensor(state_batch)
-                action_batch = torch.LongTensor(action_batch)
-                reward_batch = torch.FloatTensor(reward_batch)
-                next_state_batch = torch.FloatTensor(next_state_batch)
-                done_batch = torch.FloatTensor(done_batch)
+                state_batch = torch.FloatTensor(state_batch).to(device)
+                action_batch = torch.LongTensor(action_batch).to(device)
+                reward_batch = torch.FloatTensor(reward_batch).to(device)
+                next_state_batch = torch.FloatTensor(next_state_batch).to(device)
+                done_batch = torch.FloatTensor(done_batch).to(device)
 
                 q_values = agent(state_batch)
                 next_q_values = agent(next_state_batch).detach()
