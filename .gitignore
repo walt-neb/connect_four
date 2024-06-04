@@ -1,19 +1,15 @@
 # Ignore everything
 *
 
-runs/
-*.pkl
-*.pth
-*.wts
-*.ckpt
-*.hyp 
-
-
 # But do not ignore .gitignore and other root files
 !.gitignore
-!/*
-!hyps/*
-!connect4_playground/**
+!*.py
+!*.txt
+
+# ...even when they are in a subdirectory
+!*/
+
+# Ignore the .venv folder
+.venv/ 
 
 
-# Explicitly allow files in specified directories (non-recursive)
