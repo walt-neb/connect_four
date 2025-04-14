@@ -1,0 +1,63 @@
+# filename: h4_cnn_optimized.hyp
+# Optimized training inputs for DDQN Connect Four agent (CNN + FC layers)
+# Target: Improved performance through longer training and refined parameters.
+
+# --- Training Control ---
+start_episode = 0
+# Significantly increase training duration for better convergence
+end_episode = 150000
+# How often to print minimal EOE summary (NEW parameter)
+short_log_interval = 50
+# How often to print detailed EOE summary & stats
+console_status_interval = 1000
+# How often to log to TensorBoard
+tensorboard_status_interval = 100
+# How often to save model/buffer checkpoints (more frequent for long runs)
+ckpt_interval = 2000
+# Render full game board for specific episodes (e.g., first, middle, near end)
+render_game_at = [0, 75000, 149999]
+# target_update_frequency: How many episodes between HARD updates of target networks (NEW parameter)
+target_update_frequency = 250
+
+# --- Learning Parameters ---
+# Learning rate for Adam optimizer (can be tuned further, maybe lower later)
+agent1_learning_rate = 0.000125
+agent2_learning_rate = 0.000125
+# Epsilon-greedy exploration parameters (decay over the new, longer end_episode)
+a1_epsilon_start = 0.95 # Slightly higher start
+a1_epsilon_end = 0.01
+a2_epsilon_start = 0.95 # Slightly higher start
+a2_epsilon_end = 0.01
+# Increased batch size (if memory allows) for potentially stabler gradients
+batch_size = 256
+# Discount factor for future rewards (standard for board games)
+gamma = 0.99
+# Maximum size of the shared replay buffer (large is generally good)
+max_replay_buffer_size = 1000000
+
+# --- Network Architecture ---
+# Convolutional layers: (out_channels, kernel_size, stride, padding)
+# Increased channels slightly, using 3x3 kernels, added a layer. Keep symmetric.
+# Calculated Flattened Size: 64 * 6 * 7 = 2688
+cnn_a1 = [(32, 3, 1, 1), (64, 3, 1, 1), (64, 3, 1, 1)]
+cnn_a2 = [(32, 3, 1, 1), (64, 3, 1, 1), (64, 3, 1, 1)]
+
+# Fully connected layer dimensions (output sizes of hidden layers)
+# Input size is calculated automatically from CNN output (2688 in this case)
+# Keeping [512, 256] -> Layers: Linear(2688, 512), ReLU, Linear(512, 256), ReLU, Linear(256, 7)
+fc_a1 = [512, 256]
+fc_a2 = [512, 256]
+
+# --- Obsolete Parameters (Should NOT be used by updated code) ---
+# enable_reward_shaping = False # Removed from code logic
+# env_debug_mode = False       # Removed from code logic
+
+# --- Notes for User ---
+# - This file contains architecture (`cnn_a1/a2`, `fc_a1/a2`) needed by play_two_models.py.
+# - Ensure enough disk space for checkpoints and replay buffer during long training.
+# - Monitor TensorBoard loss curves for stability. If loss explodes, consider:
+#   - Lowering learning rate (e.g., 0.0001 or 0.00005).
+#   - Adding gradient clipping in train_step (currently commented out).
+#   - Adjusting target_update_frequency (higher might be more stable).
+# - Training 150k episodes will take significant time.
+

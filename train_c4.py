@@ -1,9 +1,12 @@
+# filename: train_c4.py
+"""
+Training Script for Connect Four using Double DQN (DDQN) with CNN.
 
-
-
-#filename:  train_c4.py
-
-import curses
+Saves comprehensive checkpoints (episode, models, optimizers) for resuming.
+Saves replay buffer separately.
+Removes redundant saving of individual model weights during/after training.
+Use 'disassemble_checkpoint.py' to extract individual weights for playing.
+"""
 import datetime
 import time
 import ast
@@ -11,551 +14,284 @@ import os
 import sys
 import pickle
 import numpy as np
-#import ddqn_agent_cnn
-from ddqn_agent_cnn import CNNDDQNAgent 
-from two_player_env import TwoPlayerConnectFourEnv
-from replay_buffer import ReplayBuffer
-from torch.utils.tensorboard import SummaryWriter
-
-import torch.nn.functional as F
-from collections import namedtuple
-
-
+import math
+import argparse
+import shutil
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from collections import deque
-import torch
-import pickle
+from collections import deque, namedtuple
+
+# --- Local Imports ---
+from ddqn_agent_cnn import CNNDDQNAgent
+from two_player_env import TwoPlayerConnectFourEnv
+from replay_buffer import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 
+Transition = namedtuple('Transition', ['state', 'action', 'reward', 'next_state', 'done'])
 
+# --- Utility Functions (load_hyperparams, print_parameters, normalize_state, train_step) ---
+# (These remain the same)
 def load_hyperparams(hyp_file):
     params = {}
+    print(f"Loading hyperparameters from: {hyp_file}")
     with open(hyp_file, 'r') as f:
         for line in f:
             line = line.strip()
+            if line.startswith('#') or not line: continue
             if "=" in line:
-                # Parse line
-                var_name, var_value = line.split("=")
-                var_name = var_name.strip()  # remove leading/trailing white spaces
-                var_value = var_value.strip()
-
-                # Attempt to convert variable value to int, float, or leave as string
-                try:
-                    var_value = int(var_value)
-                except ValueError:
-                    try:
-                        var_value = float(var_value)
-                    except ValueError:
-                        # If it's neither int nor float, keep as string
-                        pass
-
-                # Add the variable to the params dictionary
-                params[var_name] = var_value
-    return params
+                var_name, var_value = line.split("=", 1); var_name = var_name.strip(); var_value = var_value.strip()
+                try: params[var_name] = ast.literal_eval(var_value)
+                except: params[var_name] = var_value
+    print("Hyperparameters loaded."); return params
 
 def print_parameters(params):
-    if not params:
-        print("The parameters dictionary is empty.")
-        return
-    param_str = ""
-    print("*** Training Parameters: ")
-    for key, value in params.items():
-        param_str += (f"\t\t{key} :\t{value}\n")
+    if not params: return "No parameters found."
+    param_str = "*** Training Parameters: ***\n";
+    for key, value in params.items(): param_str += (f"\t{key:<25} : {value}\n")
     return param_str
 
+def normalize_state(board_2d, current_player):
+    normalized_board = np.zeros_like(board_2d, dtype=np.float32); opponent_player = 3 - current_player
+    normalized_board[board_2d == current_player] = 1.0; normalized_board[board_2d == opponent_player] = -1.0
+    return normalized_board.flatten()
 
-def save_checkpoint(model, optimizer, replay_buffer, episode, checkpoint_path):
-    print(f"Type before action: {type(replay_buffer)}")
-    # Save model state
-    model_state = {
-        'state_dict': model.state_dict(),
-        'optimizer': optimizer.state_dict(),
-        'episode': episode  # Include the episode number
-    }
-    torch.save(model_state, checkpoint_path + '_model.ckpt')
-
-    # Save replay buffer and episode number using pickle
-    buffer_state = {
-        'replay_buffer': replay_buffer,
-        'episode': episode
-    }
-    with open(checkpoint_path + '_buffer.pkl', 'wb') as f:
-        pickle.dump(buffer_state, f)
-
-def load_checkpoint(checkpoint_path, model, optimizer, device):
-    # Load model state
-    model_checkpoint = torch.load(checkpoint_path + '_model.ckpt', map_location=device)
-    model.load_state_dict(model_checkpoint['state_dict'])
-    optimizer.load_state_dict(model_checkpoint['optimizer'])
-    episode = model_checkpoint['episode']
-
-    # Load replay buffer
-    with open(checkpoint_path + '_buffer.pkl', 'rb') as f:
-        buffer_state = pickle.load(f)
-    replay_buffer = buffer_state['replay_buffer']
-    assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
-    assert episode == buffer_state['episode'], "Episode mismatch between model and buffer state."
-
-    return model, optimizer, replay_buffer, episode
-
-def load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, agent1_wts=None, agent2_wts=None, rp_buffer_file=None):
-    input_channels = 1   # Assuming a single-channel input for the Connect Four board
-    input_height = 6     # Connect Four board height
-    input_width = 7      # Connect Four board width
-    output_dim = 7       # One output for each column
-
-    print(f'A1 Convolutional layers: {cnn_a1}')
-    print(f'A2 Convolutional layers: {cnn_a2}')
-    print(f'A1 Fully connected layers: {fc_a1}')
-    print(f'A2 Fully connected layers: {fc_a2}')
-
-    # Initialize agents with the specified convolutional and fully connected layers
-    agent1 = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a1, fc_a1)
-    agent2 = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a2, fc_a2)
-
-    replay_buffer = deque(maxlen=10000)  # Adjust size as needed
-
-    # Load weights if paths are provided
-    if agent1_wts and os.path.exists(agent1_wts):    
-        agent1.load_state_dict(torch.load(agent1_wts))
-        agent1.eval()
-        print(f"Loaded weights for Agent 1 from {agent1_wts}.")
-    else:
-        print(f"Starting Agent 1 from scratch or file not found: {agent1_wts}")
-
-    if agent2_wts and os.path.exists(agent2_wts):
-        agent2.load_state_dict(torch.load(agent2_wts))
-        agent2.eval()
-        print(f"Loaded weights for Agent 2 from {agent2_wts}.")
-    else:
-        print(f"Starting Agent 2 from scratch or file not found: {agent2_wts}")
-
-    # Load replay buffer if a file is provided
-    if rp_buffer_file and os.path.exists(rp_buffer_file):
-        with open(rp_buffer_file, 'rb') as f:
-            replay_buffer = pickle.load(f)
-            assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
-
-        print(f"Loaded replay buffer from {rp_buffer_file}.")
-    else:
-        print(f"Starting new replay buffer or file not found: {rp_buffer_file}")
-
-    return agent1, agent2, replay_buffer
-
-
-def soft_update(target_model, source_model, tau=0.005):
-    """
-    Softly update the target model's weights using the weights from the source model.
-    tau is a small coefficient.
-    """
-    for target_param, param in zip(target_model.parameters(), source_model.parameters()):
-        target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)        
-
-# Define the Transition namedtuple
-Transition = namedtuple('Transition', ['state', 'action', 'reward', 'next_state', 'done'])
-
-def train(agent, agent_tgt, optimizer, replay_buffer, batch_size, gamma, tau=0.005):
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    if len(replay_buffer) < batch_size:
-        return torch.tensor(0.0, device=device)  # Not enough samples to train so return 0 loss
-
-    # Ensure the replay buffer is a list or convert it temporarily for sampling
-    if isinstance(replay_buffer, (set, dict)):
-        replay_buffer = list(replay_buffer)  # Convert to list if not already
-
-    # Sample a batch from the replay buffer
-    transitions = replay_buffer.sample(batch_size)    
-    #print("Transitions sample:", transitions)
-    if transitions and isinstance(transitions[0], tuple):
-        batch = [Transition(*t) for t in transitions]  # Convert list of tuples to list of Transition namedtuples
-    else:
-        batch = transitions  # Already Transition namedtuples
-    #print("Batch sample:", batch[0].state, batch[0].action, batch[0].reward, batch[0].next_state, batch[0].done)
-
-    # Unpack the transitions
-    states, actions, rewards, next_states, dones = zip(*transitions)
-    
-    states = torch.tensor([t.state for t in batch], dtype=torch.float32).view(batch_size, 1, 6, 7).to(device)
-    next_states = torch.tensor([t.next_state for t in batch], dtype=torch.float32).view(batch_size, 1, 6, 7).to(device)
-    actions = torch.tensor([t.action for t in batch], dtype=torch.int64).to(device)
-    rewards = torch.tensor([t.reward for t in batch], dtype=torch.float32).to(device)
-    dones = torch.tensor([t.done for t in batch], dtype=torch.bool).to(device)
-
-
-    # Current Q values using the main network
-    curr_q_values = agent(states).gather(1, actions.unsqueeze(1)).squeeze(1)
-
-    # Select best actions in next states using the main network
-    next_actions = agent(next_states).argmax(1, keepdim=True)
-
-    # Evaluate these next actions using the target network
-    next_q_values = agent_tgt(next_states).gather(1, next_actions).squeeze(1)
-    next_q_values[dones] = 0  # No next state if the game is done
-
-    # Compute the target Q values using the Bellman equation
-    target_q_values = rewards + (gamma * next_q_values)
-
-    # Calculate the MSE loss
-    loss = nn.MSELoss()(curr_q_values, target_q_values)
-
-    # Gradient descent
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    # Soft update of the target network
-    soft_update(agent_tgt, agent, tau=0.005)
-
+def train_step(agent_policy, agent_target, optimizer, replay_buffer, batch_size, gamma, device):
+    if len(replay_buffer) < batch_size: return torch.tensor(0.0, device=device)
+    transitions = replay_buffer.sample(batch_size); states, actions, rewards, next_states, dones = zip(*transitions)
+    states_tensor = torch.tensor(np.array(states), dtype=torch.float32).view(batch_size, 1, 6, 7).to(device)
+    next_states_tensor = torch.tensor(np.array(next_states), dtype=torch.float32).view(batch_size, 1, 6, 7).to(device)
+    actions_tensor = torch.tensor(actions, dtype=torch.long).unsqueeze(-1).to(device)
+    rewards_tensor = torch.tensor(rewards, dtype=torch.float32).unsqueeze(-1).to(device)
+    dones_tensor = torch.tensor(dones, dtype=torch.bool).unsqueeze(-1).to(device)
+    with torch.no_grad():
+        next_state_actions = agent_policy(next_states_tensor).argmax(dim=1, keepdim=True)
+        next_state_q_values = agent_target(next_states_tensor).gather(1, next_state_actions)
+        next_state_q_values[dones_tensor] = 0.0; target_q_values = rewards_tensor + (gamma * next_state_q_values)
+    current_q_values = agent_policy(states_tensor).gather(1, actions_tensor)
+    loss = nn.SmoothL1Loss()(current_q_values, target_q_values) # Huber loss
+    optimizer.zero_grad(); loss.backward()
+    torch.nn.utils.clip_grad_norm_(agent_policy.parameters(), max_norm=1.0); optimizer.step()
     return loss
 
-
-dbmode=1
-def str_to_bool(s):
-    result = s.lower() == 'true'
-    return result
-
-def ensure_list_of_tuples(data):
-    if isinstance(data, tuple):
-        return [data]
-    return data
-
+# --- Main Execution Block ---
 def main():
+    # --- Argument Parser Setup (Same as before) ---
+    parser = argparse.ArgumentParser(description='Train Connect Four DDQN Agents.', formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('hyp_file', type=str, help='Path to hyperparameter file')
+    parser.add_argument('--resume_from_checkpoint', type=str, default=None, help='Path to checkpoint file (.pth) to resume training.')
+    parser.add_argument('--load_agent1_weights', type=str, default=None, help='Path to initial weights for agent 1 (only if not resuming).')
+    parser.add_argument('--load_agent2_weights', type=str, default=None, help='Path to initial weights for agent 2 (only if not resuming).')
+    parser.add_argument('--load_buffer', type=str, default=None, help='Path to replay buffer (.pkl) to load initially or with checkpoint if separate.')
+    if len(sys.argv) == 1: parser.print_help(sys.stderr); sys.exit(1)
+    args = parser.parse_args()
 
-    start_time = datetime.datetime.now()
-    print(f'torch.cuda.is_available()={torch.cuda.is_available()}')
+    # --- Initial Setup (Same as before) ---
+    start_time_dt = datetime.datetime.now(); print(f"Starting script at: {start_time_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu"); print(f'Using PyTorch device: {device}')
 
-    if len(sys.argv) < 2:
-        print("Usage: python train_c4.py <hyperparameters_file> [agent1_weights] [agent2_weights] [replay_buffer]")
-        return
-    
-    hyp_file = sys.argv[1]
-    hyp_file_root = hyp_file.rstrip('.hyp')
-    hyp_file_root = os.path.basename(hyp_file_root)
-    print(f'hyp_file_root: {hyp_file_root}')
-
-    params = load_hyperparams(hyp_file)
+    # --- Load Hyperparameters (Same as before) ---
+    hyp_file = args.hyp_file
+    if not os.path.exists(hyp_file): print(f"Error: Hyp file not found: {hyp_file}"); sys.exit(1)
+    params = load_hyperparams(hyp_file); hyp_file_root = os.path.basename(hyp_file).replace('.hyp', '')
     print(print_parameters(params))
-    writer = SummaryWriter(f'runs/{hyp_file_root}_connect_four_experiment')
 
-    try:
-        cnn_a1 = ast.literal_eval(params["cnn_a1"])
-        cnn_a2 = ast.literal_eval(params["cnn_a2"])
-        fc_a1 = ast.literal_eval(params["fc_a1"])
-        fc_a2 = ast.literal_eval(params["fc_a2"])
-        render_games = ast.literal_eval(params["render_game_at"])
-    except Exception as e:
-        print(e)
-        sys.exit(1)
+    # Extract key parameters (Same as before)
+    end_episode = params['end_episode']; short_log_interval = params.get('short_log_interval', 50); console_status_interval = params.get('console_status_interval', 1000)
+    tensorboard_status_interval = params.get('tensorboard_status_interval', 100); ckpt_interval = params.get('ckpt_interval', 2000); render_game_at = params.get('render_game_at', [])
+    target_update_freq = params.get('target_update_frequency', 250); agent1_lr = params['agent1_learning_rate']; agent2_lr = params['agent2_learning_rate']
+    a1_epsilon_start = params.get('a1_epsilon_start', 1.0); a1_epsilon_end = params.get('a1_epsilon_end', 0.01); a2_epsilon_start = params.get('a2_epsilon_start', 1.0); a2_epsilon_end = params.get('a2_epsilon_end', 0.01)
+    batch_size = params['batch_size']; gamma = params['gamma']; buffer_capacity = params['max_replay_buffer_size']
+    cnn_a1_params = params['cnn_a1']; cnn_a2_params = params['cnn_a2']; fc_a1_dims = params['fc_a1']; fc_a2_dims = params['fc_a2']
 
-    cnn_a1 = ensure_list_of_tuples(cnn_a1)
-    cnn_a2 = ensure_list_of_tuples(cnn_a2)
+    # --- Setup TensorBoard & Log Dir (Same as before) ---
+    log_dir = f'runs/{hyp_file_root}_{start_time_dt.strftime("%Y%m%d_%H%M%S")}'
+    writer = SummaryWriter(log_dir); print(f"TensorBoard logs: {log_dir}")
+    writer.add_text('Hyperparameters', print_parameters(params).replace('\t','&nbsp;&nbsp;&nbsp;&nbsp;').replace('\n','<br/>'))
+    try: shutil.copy2(hyp_file, os.path.join(log_dir, os.path.basename(hyp_file))); print(f"Copied hyperparameter file to log directory.")
+    except Exception as e: print(f"Warning: Could not copy hyperparameter file: {e}")
 
-    # Check command line arguments
-    if len(sys.argv) == 5:  # Expected: script name, agent1 weights, agent2 weights, buffer
-        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, sys.argv[2], sys.argv[3], sys.argv[4])
-    elif len(sys.argv) == 4:  # Only agents, no buffer
-        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2, sys.argv[2], sys.argv[3])
+    # --- Initialize Agents, Optimizers, Env, Buffer (Same as before) ---
+    input_channels = 1; input_height = 6; input_width = 7; output_dim = 7
+    print("\n--- Building Agent 1 POLICY Network ---")
+    agent1 = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a1_params, fc_a1_dims).to(device)
+    print("\n--- Building Agent 2 POLICY Network ---")
+    agent2 = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a2_params, fc_a2_dims).to(device)
+    print("\n--- Building Agent 1 TARGET Network ---")
+    agent1_tgt = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a1_params, fc_a1_dims).to(device); agent1_tgt.eval()
+    print("\n--- Building Agent 2 TARGET Network ---")
+    agent2_tgt = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_a2_params, fc_a2_dims).to(device); agent2_tgt.eval()
+    print("\n--- Building Optimizers ---")
+    optimizer1 = optim.Adam(agent1.parameters(), lr=agent1_lr); optimizer2 = optim.Adam(agent2.parameters(), lr=agent2_lr)
+    env = TwoPlayerConnectFourEnv(writer=writer); replay_buffer = ReplayBuffer(buffer_capacity); start_episode = 0
+
+    # --- Loading Logic (Same as before - handles resume OR initial weights/buffer) ---
+    if args.resume_from_checkpoint:
+        if os.path.exists(args.resume_from_checkpoint):
+            print(f"Resuming training from checkpoint: {args.resume_from_checkpoint}")
+            try:
+                checkpoint = torch.load(args.resume_from_checkpoint, map_location=device, weights_only=False)
+                start_episode = checkpoint.get('episode', 0)
+                agent1.load_state_dict(checkpoint['agent1_state_dict']); agent2.load_state_dict(checkpoint['agent2_state_dict'])
+                optimizer1.load_state_dict(checkpoint['optimizer1_state_dict']); optimizer2.load_state_dict(checkpoint['optimizer2_state_dict'])
+                if 'replay_buffer_deque' in checkpoint:
+                     replay_buffer.buffer = checkpoint['replay_buffer_deque']; print(f"Loaded replay buffer ({len(replay_buffer)}) from checkpoint.")
+                elif args.load_buffer and os.path.exists(args.load_buffer):
+                     print(f"Trying separate buffer: {args.load_buffer}")
+                     with open(args.load_buffer, 'rb') as f: replay_buffer.buffer = pickle.load(f)
+                     print(f"Loaded replay buffer ({len(replay_buffer)}) from {args.load_buffer}.")
+                else: print("No replay buffer found/specified for resume.")
+                print(f"Resuming from episode {start_episode}")
+            except Exception as e: print(f"ERROR loading checkpoint: {e}. Starting scratch."); start_episode = 0
+        else: print(f"Warn: Checkpoint file not found: {args.resume_from_checkpoint}. Starting scratch."); start_episode = params.get('start_episode', 0)
     else:
-        agent1, agent2, replay_buffer = load_agents_and_buffer(cnn_a1, cnn_a2, fc_a1, fc_a2)  
-    
-    assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
+        print("No checkpoint specified. Starting new run or loading initial components.")
+        start_episode = params.get('start_episode', 0)
+        if args.load_agent1_weights and os.path.exists(args.load_agent1_weights):
+            try: agent1.load_state_dict(torch.load(args.load_agent1_weights, map_location=device, weights_only=True)); print(f"Loaded initial W1: {args.load_agent1_weights}")
+            except Exception as e: print(f"Warn: Load initial W1 failed: {e}")
+        if args.load_agent2_weights and os.path.exists(args.load_agent2_weights):
+            try: agent2.load_state_dict(torch.load(args.load_agent2_weights, map_location=device, weights_only=True)); print(f"Loaded initial W2: {args.load_agent2_weights}")
+            except Exception as e: print(f"Warn: Load initial W2 failed: {e}")
+        if args.load_buffer and os.path.exists(args.load_buffer):
+             try:
+                 with open(args.load_buffer, 'rb') as f: replay_buffer.buffer = pickle.load(f)
+                 print(f"Loaded initial buffer ({len(replay_buffer)}) from: {args.load_buffer}")
+             except Exception as e: print(f"Error loading initial buffer: {e}")
 
-    # Move agents to GPU if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Sync targets after loading
+    agent1_tgt.load_state_dict(agent1.state_dict()); agent2_tgt.load_state_dict(agent2.state_dict())
 
-    agent1 = agent1.to(device)
-    agent2 = agent2.to(device)
-    
-    # Create target networks for policy stabilization
-    agent1_tgt = agent1
-    agent2_tgt = agent2
-
-    agent1_tgt = agent1_tgt.to(device)
-    agent2_tgt = agent2_tgt.to(device)
-    print(f'agent1.device: {agent1.device}')
-    print(f'agent2.device: {agent2.device}')
-    print(f'agent1_tgt.device: {agent1_tgt.device}')
-    print(f'agent2_tgt.device: {agent2_tgt.device}')
-
-
-    # Optimizers
-    optimizer1 = optim.Adam(agent1.parameters(), lr=params["agent1_learning_rate"])
-    optimizer2 = optim.Adam(agent2.parameters(), lr=params["agent2_learning_rate"])
-
-
-    # Environment
-    env = TwoPlayerConnectFourEnv(writer=writer)
-
-    # Main training loop
-    end_episode = params["end_episode"]
-    batch_size = params["batch_size"]
-    buffer_capacity = params["max_replay_buffer_size"]
-
-    replay_buffer1 = ReplayBuffer(buffer_capacity)
-    replay_buffer2 = ReplayBuffer(buffer_capacity)
-
-    episode_framecount = 0
-    agent_1_score = 0
-    agent_2_score = 0
-    draw_score = 0
-    agent_1_starts = 0
-    agent_2_starts = 0
-    agent_1_reward = 0
-    agent_2_reward = 0
-    update_frequency = 1000
-    gamma = params["gamma"]
-    steps_per_game = 0
-    ave_steps_per_game = 10
-
-    start_episode = params["start_episode"]
-    env.enable_reward_shaping(str_to_bool(params["enable_reward_shaping"]))
-    env.enable_debug_mode(str_to_bool(params["env_debug_mode"]))
-
-    #agent1, optimizer1, replay_buffer, start_episode = load_checkpoint('path_to_checkpoint', agent1, optimizer1, device)
+    # --- Training Loop ---
+    print(f"\n--- Starting Training Loop from episode {start_episode} to {end_episode} ---")
+    total_games_played = 0; agent_1_wins = 0; agent_2_wins = 0; draws = 0
+    cumulative_agent_1_reward = 0.0; cumulative_agent_2_reward = 0.0
+    total_steps_all_episodes = 0; rolling_avg_steps = 0.0
+    # Could potentially load win counts from checkpoint if saved there
 
     for episode in range(start_episode, end_episode):
-        state, active_agent = env.reset()
-
-        #active_agent = 1 # Start with agent 1
-
-        done = False
-        total_loss1 = 0
-        total_loss2 = 0
-        num_steps1 = 0
-        num_steps2 = 0
-        episode_framecount += 1
-        if active_agent == 1:
-            agent_1_starts += 1
-        else:
-            agent_2_starts += 1
-        if agent_2_starts > 0:
-            #writer.add_scalar(f'agent_1_starts/agent_2_starts={agent_1_starts/agent_2_starts:.3f}', episode)
-            pass
-
-        print(f'{hyp_file_root} ', end='')
+        # (Inner loop logic remains the same: normalize, select, step, push, train)
+        state_2d, active_player_id = env.reset(); done = False
+        episode_steps = 0; episode_loss1 = 0.0; episode_loss2 = 0.0
+        num_train_steps1 = 0; num_train_steps2 = 0
         while not done:
-            logthis = False
-            valid_actions = env.get_valid_actions()
-            epsilon1 = agent1.get_epsilon(episode_framecount, end_episode, params["a1_epsilon_start"], params["a1_epsilon_end"])
-            epsilon2 = agent2.get_epsilon(episode_framecount, end_episode, params["a2_epsilon_start"], params["a2_epsilon_end"])
-            
-            
-            # Determine which agent is playing
-            if active_agent == 1:
-                action = agent1.select_action(state, valid_actions, epsilon1)
-                next_state, reward, done, next_player = env.step(action)
-                replay_buffer1.push(state, action, reward, next_state, done)
-                #assert isinstance(replay_buffer1, deque), "Replay buffer is not a deque!"
+            normalized_state_flat = normalize_state(state_2d, active_player_id); valid_actions = env.get_valid_actions()
+            if active_player_id == 1: epsilon = agent1.get_epsilon(episode, end_episode, a1_epsilon_start, a1_epsilon_end); action = agent1.select_action(normalized_state_flat, valid_actions, epsilon)
+            else: epsilon = agent2.get_epsilon(episode, end_episode, a2_epsilon_start, a2_epsilon_end); action = agent2.select_action(normalized_state_flat, valid_actions, epsilon)
+            next_state_2d, reward, done, next_player_id = env.step(action); normalized_next_state_flat = normalize_state(next_state_2d, active_player_id)
+            replay_buffer.push(normalized_state_flat, action, reward, normalized_next_state_flat, done)
+            if active_player_id == 1: cumulative_agent_1_reward += reward
+            else: cumulative_agent_2_reward += reward
+            loss1 = train_step(agent1, agent1_tgt, optimizer1, replay_buffer, batch_size, gamma, device); loss2 = train_step(agent2, agent2_tgt, optimizer2, replay_buffer, batch_size, gamma, device)
+            if loss1 > 0: episode_loss1 += loss1.item(); num_train_steps1 += 1
+            if loss2 > 0: episode_loss2 += loss2.item(); num_train_steps2 += 1
+            if episode in render_game_at: print(f"\n--- Ep {episode} Step {episode_steps+1} P{active_player_id} Act:{action} Rew:{reward:.1f} Done:{done} ---"); env.render()
+            state_2d = next_state_2d; active_player_id = next_player_id
+            episode_steps += 1; total_steps_all_episodes += 1
 
-                loss1 = train(agent1, agent1_tgt, optimizer1, replay_buffer1, batch_size, gamma, tau=0.005)
-                # Update target network using soft updates
-                if episode % update_frequency == 0:
-                    soft_update(agent1_tgt, agent1, .05)
-                
-                if loss1 is not None:
-                    total_loss1 += loss1.item()
-                    num_steps1 += 1
-            else:
-                action = agent2.select_action(state, valid_actions, epsilon2)
-                next_state, reward, done, next_player = env.step(action)
-                replay_buffer2.push(state, action, reward, next_state, done)
-                #assert isinstance(replay_buffer2, deque), "Replay buffer is not a deque!"
+        # --- End of Episode ---
+        # (Stats accumulation and logging remain the same)
+        total_games_played += 1; current_run_games = episode - start_episode + 1
+        if env.winner == 1: agent_1_wins += 1
+        elif env.winner == 2: agent_2_wins += 1
+        elif env.done: draws += 1
+        if rolling_avg_steps == 0 and episode_steps > 0: rolling_avg_steps = episode_steps
+        elif episode_steps > 0 : rolling_avg_steps = 0.99 * rolling_avg_steps + 0.01 * episode_steps
+        avg_loss1 = episode_loss1 / num_train_steps1 if num_train_steps1 > 0 else 0; avg_loss2 = episode_loss2 / num_train_steps2 if num_train_steps2 > 0 else 0
+        a1_win_rate = agent_1_wins / total_games_played if total_games_played > 0 else 0; a2_win_rate = agent_2_wins / total_games_played if total_games_played > 0 else 0
+        draw_rate = draws / total_games_played if total_games_played > 0 else 0
+        current_epsilon = agent1.get_epsilon(episode, end_episode, a1_epsilon_start, a1_epsilon_end)
+        if episode % short_log_interval == 0 or episode == end_episode - 1:
+             winner_str = f"A1 Win" if env.winner == 1 else (f"A2 Win" if env.winner == 2 else "Draw")
+             print(f"Ep {episode:<5}/{end_episode} | {winner_str:<7} | Steps: {episode_steps:<3} (Avg: {rolling_avg_steps:.1f}) | Eps: {current_epsilon:.3f} | Buf: {len(replay_buffer):<7} | Loss A1/A2: {avg_loss1:.4f}/{avg_loss2:.4f}")
+        if episode % console_status_interval == 0 or episode == end_episode - 1:
+            print(f"--- Episode {episode} Detailed Stats ({total_games_played} total games tracked) ---"); print(f"  Scores -> A1 Wins: {agent_1_wins} ({a1_win_rate:.2%}) | A2 Wins: {agent_2_wins} ({a2_win_rate:.2%}) | Draws: {draws} ({draw_rate:.2%})")
+            if episode not in render_game_at and env.winner is not None: env.render()
+            print("-" * (30 + len(str(episode))))
+        if episode % tensorboard_status_interval == 0 or episode == end_episode - 1:
+            writer.add_scalar('Progress/Episode', episode, episode); writer.add_scalar('Progress/Epsilon', current_epsilon, episode)
+            writer.add_scalar('Performance/Steps_Per_Game', episode_steps, episode); writer.add_scalar('Performance/Avg_Steps_Per_Game_EMA', rolling_avg_steps, episode)
+            writer.add_scalar('Loss/Agent1_Avg_Loss', avg_loss1, episode); writer.add_scalar('Loss/Agent2_Avg_Loss', avg_loss2, episode)
+            writer.add_scalar('Wins/Agent1_Total_Win_Rate', a1_win_rate, episode); writer.add_scalar('Wins/Agent2_Total_Win_Rate', a2_win_rate, episode)
+            writer.add_scalar('Wins/Total_Draw_Rate', draw_rate, episode); writer.add_scalar('Buffer/Size', len(replay_buffer), episode)
 
-                loss2 = train(agent2, agent2_tgt, optimizer2, replay_buffer2, batch_size, gamma, tau=0.005)
-                if loss2 is not None:
-                    total_loss2 += loss2.item()
-                    num_steps2 += 1
+        # Target Network Update
+        if episode > 0 and episode % target_update_freq == 0:
+             agent1_tgt.load_state_dict(agent1.state_dict()); agent2_tgt.load_state_dict(agent2.state_dict())
 
-            if episode in render_games: # or steps_per_game > 40: 
-                #logthis = True
-                print(f"----Episode {episode} Step {num_steps1 + num_steps2}")                
-                winner = env.render() 
-                #print(f"Agent {active_agent} playing ({env.get_player_symbol(active_agent)}) takes action {action} receives reward of {reward:.2f}")   
-                #input("Press key to continue...")
+        # --- Checkpoint Saving (MODIFIED: Only combined checkpoint + separate buffer) ---
+        if episode > 0 and episode % ckpt_interval == 0:
+            # Combined Checkpoint for Resuming (includes model weights)
+            ckpt_path = f'./wts/checkpoint_{hyp_file_root}_ep{episode}.pth'
+            checkpoint = {
+                'episode': episode + 1, # Save next episode to start from
+                'agent1_state_dict': agent1.state_dict(),
+                'agent2_state_dict': agent2.state_dict(),
+                'optimizer1_state_dict': optimizer1.state_dict(),
+                'optimizer2_state_dict': optimizer2.state_dict(),
+                # Note: Buffer is NOT included here by default
+            }
+            try: torch.save(checkpoint, ckpt_path); print(f"--- Checkpoint saved: {ckpt_path} ---")
+            except Exception as e: print(f"ERROR saving checkpoint: {e}")
 
-            if not done:
-                state = next_state
-                active_agent = next_player
-            #print('.', end='')
+            # Separate Buffer Saving
+            replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}_ep{episode}.pkl'
+            try:
+                with open(replay_buffer_filename, 'wb') as f: pickle.dump(replay_buffer.buffer, f)
+                print(f"--- Replay buffer saved separately: {replay_buffer_filename} ---")
+            except Exception as e: print(f"Warning: Could not save replay buffer separately: {e}")
 
-        # track the scores
-        if env.winner == 1:
-            agent_1_score += 1
-            agent_1_reward += reward
-        elif env.winner == 2:
-            agent_2_score += 1
-            agent_2_reward += reward
-        elif env.winner == None:
-            draw_score += 1
+            # *** REMOVED saving of separate m1_*.pth and m2_*.pth here ***
 
-        steps_per_game = (num_steps1 + num_steps2)
-        if ave_steps_per_game == 0:
-            ave_steps_per_game = steps_per_game
-        else:
-            ave_steps_per_game = 0.97*ave_steps_per_game + 0.03*steps_per_game
-        print(f'\t{steps_per_game:02d} moves in {episode} of {end_episode}. Ave moves: {ave_steps_per_game:.3f} - Press (e) for early exit')
+    # --- End of Training Loop ---
+    writer.close(); print("\n--- Training Finished ---")
 
-        if done and (episode % params["console_status_interval"] == 0 or logthis==True):  # Render end of the game for specified episodes
-            print(f'----Episode {episode} of {end_episode}--------')
-            winner = env.render()
-            print(f"Episode {episode} Step {num_steps1 + num_steps2}")
-            print(f"Agent {active_agent} ({env.get_player_symbol(active_agent)}) action: {action}")
-            if winner is not None:
-                print(f"Agent {winner} wins")  
-            print(f'Agent 1: {agent_1_score}')
-            print(f'Agent 2: {agent_2_score}, Draws: {draw_score}')
-            print(f'Agent 1 epsilon: {epsilon1}')
-            print(f'Agent 2 epsilon: {epsilon2}')
-            if num_steps1 > 0 and num_steps2 > 0:
-                print(f'Agent 1 loss: {total_loss1 / num_steps1}')
-                print(f'Agent 2 loss: {total_loss2 / num_steps2}')
-            if agent_2_reward > 0:
-                print(f'A1 reward / A2 reward: {agent_1_reward / agent_2_reward:.3f}')
-            if episode > 0:
-                print(f'Win Rates -> Agent 1: {agent_1_score/episode:.4f}')
-                print(f'             Agent 2: {agent_2_score/episode:.4f}')
+    # --- Final Saving (Only save LAST checkpoint and buffer) ---
+    # Saving final individual models is now redundant, the last checkpoint has them.
+    # We can save a final checkpoint for clarity.
+    final_ckpt_path = f'./wts/checkpoint_{hyp_file_root}_final_ep{episode}.pth'
+    final_checkpoint = {
+         'episode': episode + 1, # Final episode + 1
+         'agent1_state_dict': agent1.state_dict(),
+         'agent2_state_dict': agent2.state_dict(),
+         'optimizer1_state_dict': optimizer1.state_dict(),
+         'optimizer2_state_dict': optimizer2.state_dict(),
+    }
+    try: torch.save(final_checkpoint, final_ckpt_path); print(f"Final checkpoint saved: {final_ckpt_path}")
+    except Exception as e: print(f"Error saving final checkpoint: {e}")
 
-        if done and (episode % params["tensorboard_status_interval"] == 0 or logthis==True): 
-            # Correct the scalar tags to be consistent and not include dynamic values
-            writer.add_scalar('Agent 1/Score', agent_1_score, episode)
-            writer.add_scalar('Agent 2/Score', agent_2_score, episode)
-            writer.add_scalar('Agent 1/Epsilon', epsilon1, episode)
-            writer.add_scalar('Agent 2/Epsilon', epsilon2, episode)
-
-            if num_steps1 > 0 and num_steps2 > 0:
-                writer.add_scalar('Agent 1/Loss', total_loss1 / num_steps1, episode)
-                writer.add_scalar('Agent 2/Loss', total_loss2 / num_steps2, episode)
-
-            if False and episode > 0:
-                writer.add_scalar('Agent 1/Win Rate', agent_1_score/episode, episode)
-                writer.add_scalar('Agent 2/Win Rate', agent_2_score/episode, episode)
-                writer.add_scalar('Agent 2/Replay Buffer Size', len(replay_buffer2), episode)
-                writer.add_scalar('Comp/A1 reward/episode', agent_1_reward / episode, episode)
-                writer.add_scalar('Comp/A2 reward/episode', agent_2_reward / episode, episode)
-                writer.add_scalar('Comp/A1/A2 rpe', (agent_1_reward/episode)/(agent_2_reward/episode), episode)
-
-
-            writer.add_scalar('Comp/StepsPerGame', steps_per_game, episode)
-
-            if False and agent_2_starts > 0:
-                writer.add_scalar('Comp/Ratio Agent_1_over_Agent_2 as Player1', agent_1_starts / agent_2_starts, episode)
-
-            writer.add_scalar('Comp/Draws', draw_score, episode)
-
-            if agent_2_reward > 0:
-                writer.add_scalar('Comp/Ratio Agent_1_to_Agent_2 Reward', agent_1_reward / agent_2_reward, episode)
-
-            if done and (episode % params["ckpt_interval"] == 0):   
-                agent1_filename = f'./wts/m1_{hyp_file_root}'
-                agent2_filename = f'./wts/m2_{hyp_file_root}'    
-                replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}.pkl'
-                torch.save(agent1.state_dict(), agent1_filename+'.fcwts')
-                torch.save(agent2.state_dict(), agent2_filename+'.fcwts')
-                torch.save(agent1.state_dict(), agent1_filename+'.cnnwts')
-                torch.save(agent2.state_dict(), agent2_filename+'.cnnwts')    
-                with open(replay_buffer_filename, 'wb') as f:
-                    pickle.dump(replay_buffer, f)
-                    assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
-
-                # redundent save_checkpoint(agent1, optimizer1, replay_buffer1, episode, f'{hyp_file_root}_1.ckpt')
-                # we need to switch over to this method, but retain the separate model weight files for play.py
-                #save_checkpoint(agent1, optimizer1, replay_buffer, episode, f'{hyp_file_root}_1.ckpt')
-                #save_checkpoint(agent2, optimizer2, replay_buffer, episode, f'{hyp_file_root}_2.ckpt')
-
-            if check_e_keypress():# or draw_score > 10:
-                if draw_score > 10:
-                    print('Draws > 10, exiting training loop')  
-                else:
-                    print('Keyboard Keypress -e- detected, exiting training loop')
-                break
-
-    writer.close()
-
-
-    print(f'\nTraining ended on episode count: {episode}')
-    agent1_filename = f'./wts/m1_{hyp_file_root}'
-    agent2_filename = f'./wts/m2_{hyp_file_root}'    
-    replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}.pkl'
-    torch.save(agent1.state_dict(), agent1_filename+'.fcwts')
-    torch.save(agent2.state_dict(), agent2_filename+'.fcwts')
-    torch.save(agent1.state_dict(), agent1_filename+'.cnnwts')
-    torch.save(agent2.state_dict(), agent2_filename+'.cnnwts')    
-    with open(replay_buffer_filename, 'wb') as f:
-        pickle.dump(replay_buffer, f)
-        assert isinstance(replay_buffer, deque), "Replay buffer is not a deque!"
-
-
- 
-    # Print the sizes of the saved models
-    # checkpoint_a1 = torch.load(agent1_filename)
-    # for key, tensor in checkpoint_a1.items():
-    #     print(f"{agent1_filename}: {key}: {tensor.size()}")   
-    # checkpoint_a2 = torch.load(agent2_filename)
-    # for key, tensor in checkpoint_a2.items():
-    #     print(f"{agent2_filename}: {key}: {tensor.size()}")    
-
-                       
-    end_time = datetime.datetime.now()
-    elapsed_time = end_time - start_time                       
-
-    test_results_string = '\n\n----------- Training Results ----------------\n' 
-    test_results_string += f'Started training at: \t{start_time.strftime("%Y-%m-%d  %H:%M:%S")}\n'
-    test_results_string += f'Ended training at: \t{end_time.strftime("%Y-%m-%d  %H:%M:%S")}\n'
-    test_results_string += f'Total training time:  {str(elapsed_time)}\n'
-    test_results_string += f'start_episode: {start_episode}\n'
-    test_results_string += f'end_episode: {end_episode}\n'
-    test_results_string += f'Episode count: {episode}\n'
-    test_results_string += f'agent1 end epsilon: {epsilon1}\n'
-    test_results_string += f'agent2 end epsilon: {epsilon2}\n'
-    test_results_string += f'Draws: {draw_score}\n'
-    if agent_2_starts > 0:
-        test_results_string += f'agent_1_starts / agent_2_starts {agent_1_starts / agent_2_starts}\n'
-        test_results_string += f'agent_1_reward / agent_2_reward {agent_1_reward / agent_2_reward}\n'
-    test_results_string += f'Ave steps per game: {ave_steps_per_game:.2f}\n'
-    if num_steps1 > 0 and num_steps2 > 0:
-        test_results_string += f'total_loss1 / num_steps1: {total_loss1 / num_steps1}\n'
-        test_results_string += f'total_loss2 / num_steps2: {total_loss2 / num_steps2}\n'
-    test_results_string += f'Input Parameters:\n'
-    test_results_string += print_parameters(params)
-    test_results_string += f'models saved:\n{agent1_filename}\n'
-    test_results_string += f'replay buffer saved to\n{replay_buffer_filename}\n'
-    if episode != end_episode-1:
-        test_results_string += f'\n**Exited training loop early at episode {episode}'
-        test_results_string += f'\nstart_episode = {episode}\n'
-
-    print(test_results_string)
-    save_test_results_with_hyps(hyp_file,test_results_string)
-
-       
-def save_test_results_with_hyps(hyp_file, test_results_string):
+    final_replay_buffer_filename = f'./wts/replay_buffer_{hyp_file_root}_final_ep{episode}.pkl'
     try:
-        with open(hyp_file, 'r+') as file:
-            #append to the end of the file
-            file.seek(0, os.SEEK_END)
-            file.write(f'{test_results_string}\n')  # Write the "new results"
-    except Exception as e:
-        print(e)
+        with open(final_replay_buffer_filename, 'wb') as f: pickle.dump(replay_buffer.buffer, f)
+        print(f"Final buffer saved: {final_replay_buffer_filename}")
+    except Exception as e: print(f"Warning: Could not save final replay buffer: {e}")
 
+    # --- Final Summary Print & Save to logdir (Same as before) ---
+    end_time_dt = datetime.datetime.now(); elapsed_time = end_time_dt - start_time_dt
+    final_episode = episode; current_epsilon = agent1.get_epsilon(final_episode, end_episode, a1_epsilon_start, a1_epsilon_end)
+    results_string = f'Training Started: \t{start_time_dt.strftime("%Y-%m-%d %H:%M:%S")}\n'; results_string += f'Training Ended: \t{end_time_dt.strftime("%Y-%m-%d %H:%M:%S")}\n'; results_string += f'Total Duration: \t{str(elapsed_time)}\n'; results_string += f'Episodes Run: \t\t{final_episode + 1 - start_episode} (End Ep: {final_episode}, Range: {start_episode}-{final_episode})\n'; results_string += f'Total Steps: \t\t{total_steps_all_episodes}\n'; results_string += f'Final Epsilon: \t\t{current_epsilon:.5f}\n'; results_string += f'Final Buffer Size: \t{len(replay_buffer)}\n'; results_string += f'Total Games Tracked: \t{total_games_played}\n'; results_string += f'Agent 1 Wins: \t\t{agent_1_wins} ({a1_win_rate:.2%})\n'; results_string += f'Agent 2 Wins: \t\t{agent_2_wins} ({a2_win_rate:.2%})\n'; results_string += f'Draws: \t\t\t{draws} ({draw_rate:.2%})\n'; results_string += f'Final Avg Steps/Game: {rolling_avg_steps:.2f}\n'; results_string += f'Input Parameters:\n{print_parameters(params)}'; results_string += f'Final Checkpoint:\n  {final_ckpt_path}\n';
+    print("\n--- Final Training Summary ---"); print(results_string)
+    try:
+        summary_path = os.path.join(log_dir, 'final_summary.txt');
+        with open(summary_path, 'w') as f: f.write(results_string)
+        print(f"Final summary saved to: {summary_path}")
+    except Exception as e: print(f"Warning: Could not save final summary file: {e}")
 
-
-def check_e_keypress():
-    stdscr = curses.initscr()
-    curses.cbreak()
-    stdscr.nodelay(1)  # set getch() non-blocking
-    key = stdscr.getch()
-    curses.endwin()
-    if key != ord('e'):  
-        return False
-    else:
-        return True
-            
 
 if __name__ == '__main__':
-    start_time = time.time()
     main()
-    elapsed_time = time.time() - start_time
-    print(f"Elapsed time: {elapsed_time} seconds")
+    print("\nScript finished.")
+    print(f"End time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("Use 'tensorboard --logdir=runs' to view TensorBoard logs.")
+    print("Use 'python play_human.py <agent_weights_path>' to play against the trained agent.")
+    print("Use 'python disassemble_checkpoint.py <checkpoint_path>' to extract individual weights.")
+    print("Use 'python play_two_models.py <agent1_path> <agent2_path>' to play two agents against each other.")
+    print("Use 'python train_c4.py <hyp_file>' to train a new model.")
+    print("Use 'python train_c4.py --resume_from_checkpoint <checkpoint_path>' to resume training.")
+    print("Use 'python train_c4.py --load_buffer <buffer_path>' to load a replay buffer.")
+    print("Use 'python train_c4.py --load_agent1_weights <weights_path>' to load initial weights for agent 1.")
+    print("Use 'python train_c4.py --load_agent2_weights <weights_path>' to load initial weights for agent 2.")
+    print("Use 'python train_c4.py --help' for more options.")
+    print("End of script.")
 

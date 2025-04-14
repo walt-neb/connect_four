@@ -12,7 +12,7 @@ console_status_interval = 500
 tensorboard_status_interval = 100
 ckpt_interval = 2500
 render_game_at = [1, 250001]
-enable_reward_shaping = True
+enable_reward_shaping = False
 env_debug_mode = False
 
 
@@ -32,59 +32,10 @@ cnn_a1 = [(16, 4, 1, 1), (32, 4, 1, 1)]
 cnn_a2 = [(16, 4, 1, 1), (32, 4, 1, 1)]
 
 # Fully connected layer dimensions for each agent
-fc_a1 = [672, 32, 8]
-fc_a2 = [672, 32, 8]
+fc_a1 = [512, 256]
+fc_a2 = [512, 256]
 
 NOTE: Calculate the output size for each convolutional layer using the formula:
 CNN_Output_Size is equal to ((Input_Size−Kernel_Size+2×Padding)/Stride)+1
 Make sure the FC_input_size matches the CNN_output_Size
-
-
-
-
------------ Training Results ----------------
-Started training at: 	2024-05-13  08:59:26
-Ended training at: 	2024-05-13  08:59:50
-Total training time:  0:00:24.455170
-start_episode: 0
-end_episode: 20000
-Episode count: 600
-agent1 end epsilon: 0.794643249633655
-agent2 end epsilon: 0.794643249633655
-Draws: 1
-agent_1_starts / agent_2_starts 0.9900662251655629
-agent_1_reward / agent_2_reward 1.0974769529354673
-Ave steps per game: 21.54
-total_loss1 / num_steps1: 0.0718192992111047
-total_loss2 / num_steps2: 0.0709944162517786
-Input Parameters:
-		start_episode :	0
-		end_episode :	20000
-		console_status_interval :	500
-		tensorboard_status_interval :	100
-		ckpt_interval :	2500
-		render_game_at :	[1, 250001]
-		enable_reward_shaping :	True
-		env_debug_mode :	False
-		agent1_learning_rate :	0.00025
-		agent2_learning_rate :	0.00025
-		a1_epsilon_start :	0.91
-		a1_epsilon_end :	0.01
-		a2_epsilon_start :	0.91
-		a2_epsilon_end :	0.01
-		batch_size :	32
-		gamma :	0.99
-		max_replay_buffer_size :	1000000
-		cnn_a1 :	[(8, 3, 1, 1), (16, 3, 1, 1)]
-		cnn_a2 :	[(8, 3, 1, 1), (16, 3, 1, 1)]
-		fc_a1 :	[672, 32, 8]
-		fc_a2 :	[672, 32, 8]
-models saved for both agents:
-./wts/model1_h4_cnn.wts
-./wts/model2_h4_cnn.wts
-replay buffer saved to
-./wts/replay_buffer_h4_cnn.pkl
-
-**Exited training loop early at episode 600
-start_episode = 600
 

@@ -1,19 +1,29 @@
-# Ignore everything
-*
+# Python stuff
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*build*/
+*dist*/
+*.egg-info/
+*.spec
 
+# Virtual environment folder 
+venv/
+venv3.10/
+.venv/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.swp
+
+# Training Artifacts 
+# version control large outputs/logs/weights
 runs/
-*.pkl
-*.pth
-*.wts
-*.ckpt
-*.hyp 
+wts/
 
-
-# But do not ignore .gitignore and other root files
-!.gitignore
-!/*
-!hyps/*
-!connect4_playground/**
-
-
-# Explicitly allow files in specified directories (non-recursive)
