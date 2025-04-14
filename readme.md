@@ -49,6 +49,7 @@ connect_four/
 ├── play_two_models.py        # Script to play AI vs AI
 ├── disassemble_checkpoint.py # Tool to extract weights from checkpoint
 └── README.md                 # This file
+'''
 
 ## Requirements & Setup
 
