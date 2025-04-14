@@ -2,6 +2,10 @@
 # Optimized training inputs for DDQN Connect Four agent (CNN + FC layers)
 # Target: Improved performance through longer training and refined parameters.
 
+gamma_lr = 0.99
+scheduler_step_size = 1000
+target_clip_min = 20
+target_clip_max = 20
 # --- Training Control ---
 start_episode = 0
 # Significantly increase training duration for better convergence
@@ -17,19 +21,19 @@ ckpt_interval = 2000
 # Render full game board for specific episodes (e.g., first, middle, near end)
 render_game_at = [0, 75000, 149999]
 # target_update_frequency: How many episodes between HARD updates of target networks 
-target_update_frequency = 500
+target_update_frequency = 2000
 
 # --- Learning Parameters ---
 # Learning rate for Adam optimizer (can be tuned further, maybe lower later)
-agent1_learning_rate = 0.00005
-agent2_learning_rate = 0.00005
+agent1_learning_rate = 0.00001
+agent2_learning_rate = 0.00001
 # Epsilon-greedy exploration parameters (decay over the new, longer end_episode)
 a1_epsilon_start = 0.95 # Slightly higher start
 a1_epsilon_end = 0.01
 a2_epsilon_start = 0.95 # Slightly higher start
 a2_epsilon_end = 0.01
 # Increased batch size (if memory allows) for potentially stabler gradients
-batch_size = 256
+batch_size = 128
 # Discount factor for future rewards (standard for board games)
 gamma = 0.99
 # Maximum size of the shared replay buffer (large is generally good)

@@ -69,6 +69,14 @@ def train_step(agent_policy, agent_target, optimizer, replay_buffer, batch_size,
         next_state_actions = agent_policy(next_states_tensor).argmax(dim=1, keepdim=True)
         next_state_q_values = agent_target(next_states_tensor).gather(1, next_state_actions)
         next_state_q_values[dones_tensor] = 0.0; target_q_values = rewards_tensor + (gamma * next_state_q_values)
+        # Clip targets to a reasonable range, e.g. based on potential discounted rewards
+        # Max possible reward is +1 per step. Max discounted return roughly 1/(1-gamma)
+        # Min possible reward is 0 (or -1 if using -1 for loss).
+        # Let's clip somewhat generously, e.g., -20 to +20
+        target_clip_min = -20.0
+        target_clip_max = 20.0
+        target_q_values = torch.clamp(target_q_values, target_clip_min, target_clip_max)
+    
     current_q_values = agent_policy(states_tensor).gather(1, actions_tensor)
     loss = nn.SmoothL1Loss()(current_q_values, target_q_values) # Huber loss
     optimizer.zero_grad(); loss.backward()
@@ -98,6 +106,7 @@ def main():
     print(print_parameters(params))
 
     # Extract key parameters (Same as before)
+    gamma_lr = params['gamma_lr']; scheduler_step_size = params['scheduler_step_size']; target_clip_min = params['target_clip_min']; target_clip_max = params['target_clip_max']
     end_episode = params['end_episode']; short_log_interval = params.get('short_log_interval', 50); console_status_interval = params.get('console_status_interval', 1000)
     tensorboard_status_interval = params.get('tensorboard_status_interval', 100); ckpt_interval = params.get('ckpt_interval', 2000); render_game_at = params.get('render_game_at', [])
     target_update_freq = params.get('target_update_frequency', 250); agent1_lr = params['agent1_learning_rate']; agent2_lr = params['agent2_learning_rate']
@@ -125,6 +134,12 @@ def main():
     print("\n--- Building Optimizers ---")
     optimizer1 = optim.Adam(agent1.parameters(), lr=agent1_lr); optimizer2 = optim.Adam(agent2.parameters(), lr=agent2_lr)
     env = TwoPlayerConnectFourEnv(writer=writer); replay_buffer = ReplayBuffer(buffer_capacity); start_episode = 0
+    # Decay LR by factor gamma_lr every scheduler_step_size episodes
+    gamma_lr = 0.99 # Decay factor (e.g., 1% decay) - tune this
+    scheduler_step_size = 1000 # How often to decay (e.g., every 1000 episodes) - tune this
+
+    scheduler1 = torch.optim.lr_scheduler.StepLR(optimizer1, step_size=scheduler_step_size, gamma=gamma_lr)
+    scheduler2 = torch.optim.lr_scheduler.StepLR(optimizer2, step_size=scheduler_step_size, gamma=gamma_lr)
 
     # --- Loading Logic (Same as before - handles resume OR initial weights/buffer) ---
     if args.resume_from_checkpoint:
@@ -189,6 +204,11 @@ def main():
             if episode in render_game_at: print(f"\n--- Ep {episode} Step {episode_steps+1} P{active_player_id} Act:{action} Rew:{reward:.1f} Done:{done} ---"); env.render()
             state_2d = next_state_2d; active_player_id = next_player_id
             episode_steps += 1; total_steps_all_episodes += 1
+            scheduler1.step()
+            scheduler2.step()
+            # Optional: Log learning rate
+            if episode % tensorboard_status_interval == 0:
+                writer.add_scalar('Progress/Learning_Rate', optimizer1.param_groups[0]['lr'], episode)
 
         # --- End of Episode ---
         # (Stats accumulation and logging remain the same)

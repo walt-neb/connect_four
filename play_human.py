@@ -4,7 +4,7 @@ Script to play Connect Four against a trained CNN DDQN Agent.
 
 Allows a human player (always Player 1, 'X') to play against a loaded
 AI agent (always Player 2, 'O'). Now correctly loads architecture
-parameters from the associated .hyp file in the './hyp/' directory.
+parameters from the associated .hyps file in the './hyps/' directory.
 """
 
 import sys
@@ -69,7 +69,7 @@ def load_cnn_agent(agent_path, device):
             hyp_base_name = hyp_base_name[:last_underscore_idx]
 
     # --- Construct the CORRECT path to the .hyp file ---
-    config_path = os.path.join('hyp', hyp_base_name + '.hyp') # Look in ./hyp/
+    config_path = os.path.join('hyps', hyp_base_name + '.hyp') # Look in ./hyp/
 
     print(f"Derived hyperparameter base name: '{hyp_base_name}'")
     print(f"Looking for config file at: '{config_path}'")
@@ -108,7 +108,7 @@ def load_cnn_agent(agent_path, device):
     input_channels, input_height, input_width = input_dim
     agent = CNNDDQNAgent(input_channels, input_height, input_width, output_dim, cnn_params, fc_dims)
     try:
-        agent.load_state_dict(torch.load(agent_path, map_location=device, weight_only=True))
+        agent.load_state_dict(torch.load(agent_path, map_location=device, weights_only=True))
         agent.eval()
         agent.to(device)
         print(f"Agent loaded successfully from: {agent_path}")
@@ -139,7 +139,7 @@ def main():
     if len(sys.argv) not in [2, 3]:
         print("\nUsage: python play_human.py <agent_weights_path> [num_games]")
         print("Example: python play_human.py ./wts/m1_h4_cnn_final.pth 5")
-        print("\nNote: Assumes associated .hyp file exists in './hyp/' directory.")
+        print("\nNote: Assumes associated .hyps file exists in './hyps/' directory.")
         sys.exit(1)
 
     agent_weights_path = sys.argv[1]
