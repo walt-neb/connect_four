@@ -21,6 +21,8 @@ This project implements an AI agent that learns to play Connect Four using a Dou
     * Extracting individual model weights from checkpoints (`disassemble_checkpoint.py`).
 
 ## Directory Structure
+
+```text
 connect_four/
 │
 ├── hyps/                     # Hyperparameter configuration files (.hyp)
@@ -34,10 +36,10 @@ connect_four/
 │       └── final_summary.txt
 │
 ├── wts/                      # Saved weights and checkpoints (created automatically)
-│   ├── checkpoint_.pth      # Combined checkpoints for resuming training
-│   ├── replay_buffer_.pkl   # Saved replay buffers
-│   ├── m1_.pth              # Extracted weights for Agent 1 (for playing)
-│   └── m2_.pth              # Extracted weights for Agent 2 (for playing)
+│   ├── checkpoint_*.pth      # Combined checkpoints for resuming training
+│   ├── replay_buffer_*.pkl   # Saved replay buffers
+│   ├── m1_*.pth              # Extracted weights for Agent 1 (for playing)
+│   └── m2_*.pth              # Extracted weights for Agent 2 (for playing)
 │
 ├── ddqn_agent_cnn.py         # Agent class definition (CNN + FC)
 ├── two_player_env.py         # Connect Four environment logic
